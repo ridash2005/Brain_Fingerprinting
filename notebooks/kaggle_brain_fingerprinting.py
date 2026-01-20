@@ -2,7 +2,7 @@
 # # Brain Fingerprinting: Official Dataset Pipeline
 # This notebook implements the complete Brain Fingerprinting pipeline, transitioning from raw fMRI timeseries to refined functional connectomes for subject identification.
 # 
-# **Author**: Antigravity (DeepMind Advanced Agentic Coding)
+# **Copyright**: (c) 2026 Rickarya Das. All rights reserved.
 # **Logic**: ConvAutoencoder (Denoising) + Sparse Dictionary Learning (Refined Signal Extraction).
 # 
 # ---

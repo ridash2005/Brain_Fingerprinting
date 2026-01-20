@@ -1,6 +1,6 @@
 # Brain Fingerprinting
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: Proprietary](https://img.shields.io/badge/License-Proprietary-red.svg)](#-license)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
 This repository implements a robust pipeline for **Brain Fingerprinting** using Functional Connectivity (FC) matrices derived from HCP fMRI data. It features a novel refinement mechanism combining **Convolutional Autoencoders** and **Sparse Dictionary Learning (SDL)** to denoise task-based signals and improve subject identification accuracy.
@@ -111,4 +111,4 @@ Our pipeline significantly improves subject identification accuracy over baselin
 Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
 ## 📜 License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is proprietary and copyrighted. All rights reserved by **Rickarya Das**. See the [LICENSE](LICENSE) file for the full legal text and usage restrictions.
