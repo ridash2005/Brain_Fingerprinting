@@ -52,6 +52,8 @@ import seaborn as sns
 import requests
 import tarfile
 import zipfile
+import shutil
+import datetime
 from tqdm.auto import tqdm
 
 # Aesthetics
@@ -215,6 +217,39 @@ def reconstruct_symmetric_matrix(tri_elements, n=360):
     np.fill_diagonal(matrix, 1.0)
     return matrix
 
+def get_acc(t_f, r_f, n_subjects):
+    with np.errstate(divide='ignore', invalid='ignore'):
+        c = np.corrcoef(t_f, r_f)[:n_subjects, n_subjects:]
+        c = np.nan_to_num(c, nan=0.0)
+    return np.mean(np.argmax(c, axis=1) == np.arange(n_subjects)) * 100
+
+def perform_grid_search(Y, rest_flat, n_subjects, n_parcels):
+    print("\n--- Running SDL Grid Search (K: 2-15, L: 2-K) ---")
+    results = np.zeros((16, 16)) # Max K+1, Max L+1
+    
+    for k in tqdm(range(2, 16), desc="Grid Search K"):
+        # L must be <= K
+        for l in range(2, k + 1):
+            D, X = k_svd(Y, K=k, L=l, max_iter=3) # Fewer iterations for speed
+            DX_flat = (D @ X).T
+            
+            # Use small batch reconstruction for accuracy check
+            refined_flat = np.zeros((n_subjects, len(TRIL_IDX[0])))
+            for i in range(n_subjects):
+                # We need the task_residual flat for this
+                # But to save memory/time, we can work directly on Y (which is task_residual_flat)
+                refined_flat[i] = Y[:, i] - DX_flat[i]
+            
+            results[k, l] = get_acc(refined_flat, rest_flat, n_subjects)
+            
+    return results
+
+def save_and_zip_results(output_dir):
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    zip_name = f"results_{timestamp}"
+    shutil.make_archive(os.path.join(WORKING_DIR, zip_name), 'zip', output_dir)
+    print(f"\n>>> Results bundled into: {zip_name}.zip")
+
 # --- Functional Connectivity Generation ---
 def get_image_ids(name):
     run_ids = [i for i, code in enumerate(BOLD_NAMES, 1) if name.upper() in code]
@@ -344,61 +379,95 @@ def run_end_to_end(n_subjects=339, n_parcels=360, use_synthetic=True, task="moto
     
     task_residual = task_data - task_reconstr
 
-    # --- PHASE 3: SDL REFINEMENT ---
+    # --- PHASE 3: SDL REFINEMENT & GRID SEARCH ---
     print("\n--- Phase 3: Extracting individual fingerprints (SDL) ---")
     n_tri = int(n_parcels * (n_parcels - 1) / 2)
     Y = np.zeros((n_tri, n_subjects))
     for i in range(n_subjects):
         Y[:, i] = task_residual[i][TRIL_IDX]
-        
-    D, X = k_svd(Y, K=15, L=10, max_iter=5)
-    DX_flat = (D @ X).T
     
-    # REFINED SIGNAL = Residual - GroupComponent (DX) 
-    # Logic matches main branch results showing >70% accuracy
+    # 1. Prepare data for accuracy checks
+    def flatten_tril(batch): return np.array([mat[TRIL_IDX] for mat in batch])
+    rest_flat = flatten_tril(rest_data)
+    task_flat = flatten_tril(task_data)
+    resid_flat = flatten_tril(task_residual)
+
+    # 2. Grid Search for K and L
+    grid_results = perform_grid_search(Y, rest_flat, n_subjects, n_parcels)
+    
+    # 3. Use best parameters for final refinement
+    best_idx = np.unravel_index(np.argmax(grid_results), grid_results.shape)
+    best_k, best_l = best_idx
+    print(f">>> Best Parameters found: K={best_k}, L={best_l} (Acc: {grid_results[best_k, best_l]:.2f}%)")
+    
+    D_final, X_final = k_svd(Y, K=best_k, L=best_l, max_iter=5)
+    DX_flat = (D_final @ X_final).T
+    
     final_refined = np.zeros((n_subjects, n_parcels, n_parcels))
     for i in range(n_subjects):
         final_refined[i] = task_residual[i] - reconstruct_symmetric_matrix(DX_flat[i], n_parcels)
 
+    refined_flat = flatten_tril(final_refined)
+
     # --- PHASE 4: EVALUATION & VISUALIZATION ---
     print("\n--- Phase 4: Identification Analysis ---")
     
-    # 1. Flatten all matrices to lower-triangular form ONCE
-    def flatten_tril(batch): return np.array([mat[TRIL_IDX] for mat in batch])
-    
-    rest_flat = flatten_tril(rest_data)
-    task_flat = flatten_tril(task_data)
-    resid_flat = flatten_tril(task_residual)
-    refined_flat = flatten_tril(final_refined)
-
-    def get_acc(t_f, r_f):
-        c = np.corrcoef(t_f, r_f)[:n_subjects, n_subjects:]
-        return np.mean(np.argmax(c, axis=1) == np.arange(n_subjects)) * 100
-
-    acc_raw = get_acc(task_flat, rest_flat)
-    acc_res = get_acc(resid_flat, rest_flat)
-    acc_ref = get_acc(refined_flat, rest_flat)
+    acc_raw = get_acc(task_flat, rest_flat, n_subjects)
+    acc_res = get_acc(resid_flat, rest_flat, n_subjects)
+    acc_ref = get_acc(refined_flat, rest_flat, n_subjects)
 
     print(f"Accuracy (Baseline): {acc_raw:.2f}% | (ConvAE): {acc_res:.2f}% | (ConvAE+SDL): {acc_ref:.2f}%")
 
-    # 2. Plotting using the already flattened data
-    fig, axes = plt.subplots(1, 3, figsize=(24, 7))
+    # Create run directory
+    run_dir = os.path.join(WORKING_DIR, f"run_{datetime.datetime.now().strftime('%H%M%S')}")
+    os.makedirs(run_dir, exist_ok=True)
+
+    # 1. Subject Correlation Matrices Plots
+    fig, axes = plt.subplots(1, 4, figsize=(32, 7))
     cmap = sns.diverging_palette(230, 20, as_cmap=True)
     
     c_raw = np.corrcoef(task_flat, rest_flat)[:n_subjects, n_subjects:]
+    c_res = np.corrcoef(resid_flat, rest_flat)[:n_subjects, n_subjects:]
     c_ref = np.corrcoef(refined_flat, rest_flat)[:n_subjects, n_subjects:]
     
-    sns.heatmap(c_raw, ax=axes[0], cmap=cmap, cbar=False)
-    axes[0].set_title(f"Baseline (Acc: {acc_raw:.1f}%)")
+    sns.heatmap(c_raw, ax=axes[0], cmap=cmap, cbar=True)
+    axes[0].set_title(f"Case 1: Baseline (Acc: {acc_raw:.1f}%)")
     
-    sns.heatmap(c_ref, ax=axes[1], cmap=cmap, cbar=False)
-    axes[1].set_title(f"Refined (Acc: {acc_ref:.1f}%)")
+    sns.heatmap(c_res, ax=axes[1], cmap=cmap, cbar=True)
+    axes[1].set_title(f"Case 2: ConvAE Residuals (Acc: {acc_res:.1f}%)")
     
-    sns.heatmap(c_ref - c_raw, ax=axes[2], cmap="RdBu_r", center=0)
-    axes[2].set_title("Improvement Matrix (Diagonal Gain)")
+    sns.heatmap(c_ref, ax=axes[2], cmap=cmap, cbar=True)
+    axes[2].set_title(f"Case 3: Refined (SDL) (Acc: {acc_ref:.1f}%)")
     
-    plt.tight_layout()
+    sns.heatmap(c_ref - c_raw, ax=axes[3], cmap="RdBu_r", center=0)
+    axes[3].set_title("Improvement (Refined - Baseline)")
+    
+    plt.savefig(os.path.join(run_dir, "correlation_matrices.png"), bbox_inches='tight', dpi=150)
     plt.show()
+
+    # 2. Grid Search Heatmap
+    plt.figure(figsize=(10, 8))
+    # Slice to 2-15 range
+    heat_data = grid_results[2:16, 2:16]
+    sns.heatmap(heat_data, annot=True, fmt=".1f", cmap="YlGnBu", 
+                xticklabels=range(2, 16), yticklabels=range(2, 16))
+    plt.title(f"SDL Accuracy Heatmap (Task: {task})")
+    plt.xlabel("L (Sparsity)")
+    plt.ylabel("K (Dictionary Size)")
+    plt.savefig(os.path.join(run_dir, "grid_search_heatmap.png"), bbox_inches='tight', dpi=150)
+    plt.show()
+
+    # 3. Save Numerical Results
+    with open(os.path.join(run_dir, "metrics.txt"), "w") as f:
+        f.write(f"Task: {task}\n")
+        f.write(f"Subjects: {n_subjects}\n")
+        f.write(f"Best K: {best_k}, Best L: {best_l}\n")
+        f.write(f"Accuracy Baseline: {acc_raw:.2f}%\n")
+        f.write(f"Accuracy ConvAE: {acc_res:.2f}%\n")
+        f.write(f"Accuracy Refined: {acc_ref:.2f}%\n")
+
+    # Final Zipping
+    save_and_zip_results(run_dir)
 
 # %% [markdown]
 # ## 5. Execution
