@@ -1,3 +1,0 @@
-Motor vs Rest (Frontopariet) - Accuracy before processing: 0.0029498525073746312
-Motor vs Rest (Frontopariet) - Accuracy after ConvAutoEncoder: 0.0029498525073746312
-Motor vs Rest (Frontopariet) - Accuracy after ConvAutoEncoder+SDL: 0.0029498525073746312

@@ -1,4 +1,10 @@
-nilearn
-seaborn 
+numpy
+matplotlib
+seaborn
+scikit-learn
 tqdm
 torch
+nilearn
+scipy
+nibabel
+requests
