@@ -19,9 +19,10 @@ This section sets up the Python environment, imports necessary libraries, and de
 -   **`setup_environment()`**: This function searches for the dataset. If it finds a zip file, it extracts it. It locates the directories containing "resting state" and "task" fMRI data.
 -   **`generate_fc_for_task()`**: This is a crucial helper function. It loads fMRI time-series data (BOLDSignals) for each subject and computes the **Functional Connectivity (FC)** matrix.
     -   **Equation**: The FC matrix is typically the Pearson correlation of time series between brain regions $i$ and $j$:
-        $$
-        FC_{ij} = \frac{\text{cov}(ts_i, ts_j)}{\sigma_{ts_i} \sigma_{ts_j}}
-        $$ where $ts$ is the time series.
+$$
+FC_{ij} = \frac{\text{cov}(ts_i, ts_j)}{\sigma_{ts_i} \sigma_{ts_j}}
+$$
+where $ts$ is the time series.
 
 ---
 
@@ -38,9 +39,9 @@ This is a neural network designed to compress the input data into a lower-dimens
     -   It uses `ReLU` activation functions (linear correction) and `MaxPool2d` to downsample.
 -   **Decoder**: The reverse of the encoder. It uses Transposed Convolutions (`ConvTranspose2d`) to upscale the latent features back to the original $360 \times 360$ size.
 -   **Loss Function**: The model is trained to minimize the Mean Squared Error (MSE) between the input $X$ and the reconstruction $\hat{X}$:
-    $$
-    \mathcal{L} = \frac{1}{N} \sum (X - \hat{X})^2
-    $$
+$$
+\mathcal{L} = \frac{1}{N} \sum (X - \hat{X})^2
+$$
 
 ---
 
@@ -53,9 +54,9 @@ After the Autoencoder cleans the data, the script uses **Sparse Dictionary Learn
 
 1.  **Sparse Coding (via OMP - Orthogonal Matching Pursuit)**:
     We want to represent a signal $y$ as a combination of a few "atoms" from a dictionary $D$.
-    $$
-    y \approx D x
-    $$
+$$
+y \approx D x
+$$
     subject to $\|x\|_0 \le L$ (where $x$ has at most $L$ non-zero elements).
 
 2.  **K-SVD Algorithm**:
@@ -76,15 +77,15 @@ After the Autoencoder cleans the data, the script uses **Sparse Dictionary Learn
 Defines how we measure success.
 
 -   **`calculate_accuracy` (Top-1)**: For a given subject's task FC, does it correlate most strongly with *their own* resting FC?
-    $$
-    \text{Acc} = \frac{1}{N} \sum_{i=1}^N \mathbb{I}(\text{argmax}_j(\text{Corr}(Task_i, Rest_j)) == i)
-    $$
+$$
+\text{Acc} = \frac{1}{N} \sum_{i=1}^N \mathbb{I}(\text{argmax}_j(\text{Corr}(Task_i, Rest_j)) == i)
+$$
 -   **`calculate_top_k_accuracy`**: Is the correct subject in the top $k$ matches?
 -   **`calculate_mrr` (Mean Reciprocal Rank)**: If the correct match is the 1st guess, score is 1. If 2nd, score is 1/2. If 10th, 1/10. This averages those scores.
 -   **`differential_identifiability`**: The gap between the self-correlation and the average correlation with others. Higher is better.
-    $$
-    I_{diff} = \bar{r}_{self} - \bar{r}_{others}
-    $$
+$$
+I_{diff} = \bar{r}_{self} - \bar{r}_{others}
+$$
 
 ---
 
@@ -96,9 +97,9 @@ Ensures the results are real and not just due to random chance.
 -   **`bootstrap_ci`**: Resamples the subjects with replacement 1000 times to calculate a Confidence Interval (e.g., "Accuracy is 95% ± 2%").
 -   **`permutation_test`**: Randomly shuffles the labels of subjects to see if the model's accuracy is significantly better than random guessing.
     -   $p$-value calculation:
-        $$
-        p = \frac{\text{# times random shuffle } \ge \text{ observed acc}}{\text{total permutations}}
-        $$
+$$
+p = \frac{\text{# times random shuffle } \ge \text{ observed acc}}{\text{total permutations}}
+$$
 -   **`mcnemar_test`**: A statistical test specifically for comparing two classifiers (e.g., Baseline vs. Our Model) on the same data.
 
 ---
