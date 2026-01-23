@@ -11,6 +11,10 @@ from numpy.linalg import svd
 from datetime import datetime
 from tqdm import tqdm
 
+# Import new analysis components
+from analysis.evaluation_metrics import ComprehensiveMetrics
+from analysis.statistical_validation import bootstrap_confidence_interval, permutation_test
+
 # Setup timestamped output directory
 RUN_ID = datetime.now().strftime("%Y%m%d_%H%M%S")
 OUTPUT_DIR = os.path.join("results", "runs", f"{RUN_ID}_demo")
@@ -213,24 +217,38 @@ def main():
     
     # Baseline: Task vs Rest
     corr_raw = np.corrcoef(fc_task.reshape(N_SUBJECTS, -1), fc_rest.reshape(N_SUBJECTS, -1))[:N_SUBJECTS, N_SUBJECTS:]
-    # After ConvAE
-    corr_convae = np.corrcoef(task_residual.reshape(N_SUBJECTS, -1).numpy(), fc_rest.reshape(N_SUBJECTS, -1))[:N_SUBJECTS, N_SUBJECTS:]
     # After Full Pipeline
     corr_refined = np.corrcoef(task_refined.reshape(N_SUBJECTS, -1), fc_rest.reshape(N_SUBJECTS, -1))[:N_SUBJECTS, N_SUBJECTS:]
 
-    acc_raw = calculate_accuracy(corr_raw)
-    acc_convae = calculate_accuracy(corr_convae)
-    acc_refined = calculate_accuracy(corr_refined)
+    # Use ComprehensiveMetrics for final evaluation
+    metrics_baseline = ComprehensiveMetrics(corr_raw).compute_all_metrics()
+    metrics_refined = ComprehensiveMetrics(corr_refined).compute_all_metrics()
 
-    print(f"Identification Accuracy (Raw): {acc_raw*100:.2f}%")
-    print(f"Identification Accuracy (After ConvAE): {acc_convae*100:.2f}%")
-    print(f"Identification Accuracy (After ConvAE+SDL): {acc_refined*100:.2f}%")
+    print(f"Identification Accuracy (Baseline): {metrics_baseline['top_1_accuracy']*100:.2f}%")
+    print(f"Identification Accuracy (Refined):  {metrics_refined['top_1_accuracy']*100:.2f}%")
+    print(f"Mean Reciprocal Rank (Refined):     {metrics_refined['mean_reciprocal_rank']:.4f}")
+    print(f"Differential Identifiability:       {metrics_refined['differential_identifiability']:.4f}")
 
-    # 5.4 Visualization
+    # 5.4 Statistical Validation (Small scale for demo)
+    print("\n--- Phase 4: Statistical Validation (Mini-Bootstrap) ---")
+    def fingerprint_func(t, r):
+        c = np.corrcoef(t.reshape(t.shape[0], -1), r.reshape(r.shape[0], -1))[:t.shape[0], t.shape[0]:]
+        return np.mean(np.argmax(c, axis=1) == np.arange(t.shape[0]))
+    
+    # We use task_refined and fc_rest for bootstrap
+    boot_res = bootstrap_confidence_interval(task_refined, fc_rest, fingerprint_func, n_bootstrap=50)
+    print(f"95% Confidence Interval (Refined): [{boot_res['ci_lower']:.4f}, {boot_res['ci_upper']:.4f}]")
+
+    # 5.5 Visualization
     plt.figure(figsize=(18, 5))
     plt.subplot(1, 3, 1)
     sns.heatmap(corr_raw, cmap='coolwarm')
     plt.title("Correlation: Task vs Rest (Raw)")
+    
+    plt.subplot(1, 3, 2)
+    plt.bar(['Raw', 'Refined'], [metrics_baseline['top_1_accuracy'], metrics_refined['top_1_accuracy']], color=['steelblue', 'forestgreen'])
+    plt.title("Accuracy Comparison")
+    plt.ylim(0, 1.1)
     
     plt.subplot(1, 3, 3)
     sns.heatmap(corr_refined, cmap='coolwarm')
@@ -239,6 +257,17 @@ def main():
     plt.tight_layout()
     plt.savefig(os.path.join(OUTPUT_DIR, "demo_results.png"))
     print(f"\nVisualizations saved to '{os.path.join(OUTPUT_DIR, 'demo_results.png')}'")
+    
+    # Generate a small summary report
+    summary_path = os.path.join(OUTPUT_DIR, "demo_summary.txt")
+    with open(summary_path, "w") as f:
+        f.write("Brain Fingerprinting Demo Summary\n")
+        f.write("=================================\n")
+        f.write(f"Refined Accuracy: {metrics_refined['top_1_accuracy']:.4f}\n")
+        f.write(f"95% CI: [{boot_res['ci_lower']:.4f}, {boot_res['ci_upper']:.4f}]\n")
+        f.write(f"MRR: {metrics_refined['mean_reciprocal_rank']:.4f}\n")
+    
+    print(f"Summary saved to '{summary_path}'")
     print("Seamless execution completed.")
 
 if __name__ == "__main__":

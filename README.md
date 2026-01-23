@@ -80,6 +80,12 @@ python -W ignore src/processing/refine_whole_brain.py -task motor
 
 # Using Group-Average Baseline
 python src/processing/refine_whole_brain_avg.py -task motor
+
+### 5. Manuscript Analysis (All-in-One)
+To run the full suite of experiments (Ablation, Stats, SOTA, CV) for the manuscript:
+```bash
+python src/analysis/run_complete_analysis.py --task motor --n_permutations 1000
+```
 ```
 
 ### 6. Kaggle & Notebooks

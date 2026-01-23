@@ -42,4 +42,20 @@ try:
 except ImportError as e:
     print(f"Make src.utils.matrix_ops: FAILED - {e}")
 
+# Analysis Module Tests
+analysis_modules = [
+    'statistical_validation', 'ablation_studies', 'interpretability',
+    'robustness_analysis', 'state_of_art_comparison', 'evaluation_metrics',
+    'cross_validation', 'dataset_description', 'run_complete_analysis'
+]
+
+for mod in analysis_modules:
+    try:
+        exec(f"from src.analysis.{mod} import *")
+        print(f"Make src.analysis.{mod}: SUCCESS")
+    except ImportError as e:
+        print(f"Make src.analysis.{mod}: FAILED - {e}")
+    except Exception as e:
+        print(f"Make src.analysis.{mod}: LOAD ERROR - {e}")
+
 print("Import test validation complete.")

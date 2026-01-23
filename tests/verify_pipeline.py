@@ -124,7 +124,32 @@ def verify():
         status, _ = run_cmd([sys.executable, "src/visualization/plot_optimization_heatmap.py", "-log", log_path, "-output", f"results/verification_heatmap.png"])
         if not status: raise Exception("Visualization script failed")
         
-        # 10. Demo Pipeline
+        # 10. Comprehensive Analysis Runner (New)
+        print("  Running comprehensive analysis runner...")
+        status, _ = run_cmd([sys.executable, "src/analysis/run_complete_analysis.py", 
+                            "--task", "motor", 
+                            "--output_dir", "results/verification_complete_analysis",
+                            "--data_dir", "FC_DATA"])
+        if not status: raise Exception("Comprehensive analysis runner failed")
+        
+        # Verify analysis outputs
+        analysis_files = [
+            "results/verification_complete_analysis/1_statistical_validation/statistical_report.txt",
+            "results/verification_complete_analysis/2_ablation_studies/ablation_report.txt",
+            "results/verification_complete_analysis/2_ablation_studies/ablation_results.png",
+            "results/verification_complete_analysis/3_cross_validation/cv_report.txt",
+            "results/verification_complete_analysis/4_sota_comparison/sota_report.txt",
+            "results/verification_complete_analysis/5_interpretability/convae_filters.png",
+            "results/verification_complete_analysis/6_robustness/robustness_plots.png",
+            "results/verification_complete_analysis/7_evaluation_metrics/metrics_report.txt",
+            "results/verification_complete_analysis/ANALYSIS_SUMMARY.txt"
+        ]
+        for f_path in analysis_files:
+            if not os.path.exists(os.path.join(ROOT, f_path)):
+                raise Exception(f"Analysis output missing: {f_path}")
+        print("  All analysis outputs verified.")
+
+        # 11. Demo Pipeline
         status, _ = run_cmd([sys.executable, "src/demo_pipeline.py"])
         if not status: raise Exception("Demo pipeline failed")
         

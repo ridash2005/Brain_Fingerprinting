@@ -59,11 +59,11 @@ def calculate_correlation(fc_task_data, fc_train_data):
     return np.corrcoef(fc_task_data.view(N_SUBJECTS, -1).numpy(), fc_train_data.view(N_SUBJECTS, -1).numpy(), rowvar=True)[:N_SUBJECTS, N_SUBJECTS:]
 
 # Initialize arrays for storing accuracies
-accuracy_matrix = np.zeros((14, 14))  # For K=2 to 15, and L ranging from K to 15
+accuracy_matrix = np.zeros((20, 20))  # Buffer size
 
 # Loop over K and L, apply SDL, and compute accuracies
-for K in range(15, 16):
-    for L in range(2, K + 1):
+for K in range(2, 17, 2):
+    for L in range(2, K + 1, 2):
         # Apply SDL
         print(f'K= {K}, L = {L}')
         Y = np.zeros((int(N_PARCELS * (N_PARCELS - 1) / 2), N_SUBJECTS))

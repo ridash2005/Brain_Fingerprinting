@@ -1,5 +1,5 @@
-HCP_DIR = "./DATA"
-N_SUBJECTS = 339
+HCP_DIR = "D:/GitHub/my_repo/Brain_Fingerprinting/MOCK_DATA"
+N_SUBJECTS = 10
 N_PARCELS = 360
 TR = 0.72
 HEMIS = ["Right", "Left"]
