@@ -255,8 +255,12 @@ def update_dictionary(Y, D, X):
         X[k, idx] = S[0] * Vt[0, :]
     return D, X
 
-def k_svd(Y, K, L, n_iter=10, verbose=True):
+def k_svd(Y, K, L, n_iter=10, verbose=True, random_state=None):
     """K-SVD algorithm for sparse dictionary learning."""
+    if random_state is not None:
+        np.random.seed(random_state)
+    # else: It uses the system clock/entropy (non-deterministic)
+        
     m, n = Y.shape
     D = np.random.randn(m, K)
     D = D / np.linalg.norm(D, axis=0, keepdims=True)
@@ -301,7 +305,7 @@ def perform_grid_search(Y, rest_flat, n_subjects, n_parcels, K_range=(2, 16), L_
         L_vals = range(2, K + 1, 2)
         for j, L in enumerate(L_vals):
             # Run simplified K-SVD
-            D, X = k_svd(Y, K, L, n_iter=n_iter, verbose=False)
+            D, X = k_svd(Y, K, L, n_iter=n_iter, verbose=False, random_state=42)
             
             # Reconstruct and compute accuracy
             # Note: Y passed here is usually task residuals or similar
@@ -457,26 +461,56 @@ def bootstrap_ci(fc_task, fc_rest, n_bootstrap=1000, confidence=0.95):
         'ci_upper': ci_upper
     }
 
-def permutation_test(acc_model, acc_baseline, corr_matrix, n_permutations=1000):
-    """Permutation test for statistical significance."""
+def permutation_test(acc_model, corr_matrix, n_permutations=1000):
+    """
+    Permutation test for statistical significance against RANDOM CHANCE.
+    Null Hypothesis: The subject identity in Task does not match Rest.
+    """
     n = corr_matrix.shape[0]
-    observed_diff = acc_model - acc_baseline
     
-    null_diffs = []
-    for _ in tqdm(range(n_permutations), desc="Permutation test"):
+    null_accs = []
+    for _ in tqdm(range(n_permutations), desc="Permutation test (Chance)"):
         perm = np.random.permutation(n)
         # Shuffle ONLY rows to break subject-identity correspondence
-        # Row i will now contain data for subject perm[i]
-        # But we check for match at column i.
         perm_matrix = corr_matrix[perm, :]
         null_acc = calculate_accuracy(perm_matrix)
-        null_diffs.append(null_acc - acc_baseline)
+        null_accs.append(null_acc)
     
-    p_value = np.mean(np.abs(null_diffs) >= np.abs(observed_diff))
+    # One-tailed test: Fraction of null accuracies >= observed accuracy
+    # We add 1 to both numerator and denominator for conservative estimate (Phipson & Smyth 2010)
+    p_value = (np.sum(np.array(null_accs) >= acc_model) + 1) / (n_permutations + 1)
+    return p_value, null_accs
+
+def paired_permutation_test(preds_model, preds_baseline, n_permutations=1000):
+    """
+    Paired permutation test (Approximate Randomization Test) to compare two models.
+    Null Hypothesis: The two models have the same performance.
+    """
+    # Difference in mean accuracy
+    obs_diff = np.mean(preds_model) - np.mean(preds_baseline)
+    
+    n = len(preds_model)
+    null_diffs = []
+    
+    # Difference vector (1: Model better, -1: Baseline better, 0: Tie)
+    diffs = preds_model.astype(float) - preds_baseline.astype(float)
+    
+    for _ in range(n_permutations):
+        # Randomly sign-flip the differences
+        # This simulates H0 where the "better" model is random for each subject
+        signs = np.random.choice([-1, 1], size=n)
+        null_diff = np.mean(diffs * signs)
+        null_diffs.append(null_diff)
+        
+    # Two-tailed p-value
+    p_value = (np.sum(np.abs(np.array(null_diffs)) >= np.abs(obs_diff)) + 1) / (n_permutations + 1)
     return p_value, null_diffs
 
 def mcnemar_test(preds_model, preds_baseline):
-    """Perform McNemar's test to compare two models."""
+    """
+    Perform McNemar's test to compare two models.
+    Uses Exact Binomial Test if discordant pairs < 25, otherwise Chi-squared.
+    """
     # Contingency table
     # b: model correct, baseline incorrect
     # c: model incorrect, baseline correct
@@ -486,9 +520,18 @@ def mcnemar_test(preds_model, preds_baseline):
     if b + c == 0:
         return 0.0, 1.0
         
-    statistic = (np.abs(b - c) - 1)**2 / (b + c)
-    p_value = 1 - stats.chi2.cdf(statistic, df=1)
-    return statistic, p_value
+    if b + c < 25:
+        # Exact Binomial Test
+        # P = 2 * min(P(k<=x), P(k>=x)) for Binom(n, 0.5)
+        # This is the exact p-value for the two-sided hypothesis
+        p_value = 2 * stats.binom.cdf(min(b, c), b + c, 0.5)
+        statistic = 0.0 # Placeholder
+    else:
+        # Chi-squared with continuity correction
+        statistic = (max(0, np.abs(b - c) - 1))**2 / (b + c)
+        p_value = 1 - stats.chi2.cdf(statistic, df=1)
+        
+    return statistic, min(1.0, p_value)
 
 def paired_t_test(metrics1, metrics2):
     """Perform paired t-test on results (e.g. across folds)."""
@@ -542,7 +585,7 @@ def run_ablation_study(fc_task, fc_rest, model=None, K=15, L=12):
     for i in range(n_subjects):
         Y_raw[:, i] = fc_task[i][tril_idx]
     
-    D_raw, X_raw = k_svd(Y_raw, K, L, n_iter=5, verbose=False)
+    D_raw, X_raw = k_svd(Y_raw, K, L, n_iter=5, verbose=False, random_state=42)
     sdl_raw = np.dot(D_raw, X_raw).T
     fc_sdl_only = np.zeros_like(fc_task)
     for i in range(n_subjects):
@@ -579,7 +622,7 @@ def run_ablation_study(fc_task, fc_rest, model=None, K=15, L=12):
         for i in range(n_subjects):
             Y_resid[:, i] = residuals[i][tril_idx]
         
-        D_full, X_full = k_svd(Y_resid, K, L, n_iter=5, verbose=False)
+        D_full, X_full = k_svd(Y_resid, K, L, n_iter=5, verbose=False, random_state=42)
         sdl_full = np.dot(D_full, X_full).T
         fc_refined = np.zeros_like(fc_task)
         for i in range(n_subjects):
@@ -742,23 +785,39 @@ def cross_validation(fc_task, fc_rest, n_folds=5, K=15, L=12, epochs=10):
         test_tensor = torch.tensor(fc_task[test_idx, np.newaxis, :, :], dtype=torch.float32).to(DEVICE)
         
         with torch.no_grad():
-            residuals = (test_tensor - model(test_tensor)).cpu().numpy().squeeze()
-        
-        # Apply SDL
-        n_test = len(test_idx)
+            residuals_test = (test_tensor - model(test_tensor)).cpu().numpy().squeeze()
+            
+        # --- Strict Inductive SDL ---
+        # 1. Compute Train Residuals to learn Dictionary
+        with torch.no_grad():
+            train_recon = model(train_tensor.to(DEVICE)).cpu().numpy().squeeze()
+        residuals_train = fc_task[train_idx] - train_recon
+
         n_tri = int(n_parcels * (n_parcels - 1) / 2)
         tril_idx = np.tril_indices(n_parcels, k=-1)
         
-        Y = np.zeros((n_tri, n_test))
-        for i in range(n_test):
-            Y[:, i] = residuals[i][tril_idx]
+        # Prepare Train Data for KSVD
+        n_train = len(train_idx)
+        Y_train = np.zeros((n_tri, n_train))
+        for i in range(n_train):
+            Y_train[:, i] = residuals_train[i][tril_idx]
+            
+        # Learn Dictionary on TRAIN
+        D_train, _ = k_svd(Y_train, K, L, n_iter=5, verbose=False, random_state=42)
         
-        D, X = k_svd(Y, K, L, n_iter=5, verbose=False)
-        sdl_retr = np.dot(D, X).T
+        # 2. Apply to TEST (Sparse Coding only)
+        n_test = len(test_idx)
+        Y_test = np.zeros((n_tri, n_test))
+        for i in range(n_test):
+            Y_test[:, i] = residuals_test[i][tril_idx]
+        
+        # Code Test data using Train Dictionary
+        X_test = omp_sparse_coding(Y_test, D_train, L)
+        sdl_retr = np.dot(D_train, X_test).T
         
         fc_refined = np.zeros((n_test, n_parcels, n_parcels))
         for i in range(n_test):
-            fc_refined[i] = residuals[i] - reconstruct_symmetric_matrix(sdl_retr[i], n_parcels)
+            fc_refined[i] = residuals_test[i] - reconstruct_symmetric_matrix(sdl_retr[i], n_parcels)
         
         # Compute accuracy
         task_flat = fc_refined.reshape(n_test, -1)
@@ -837,7 +896,7 @@ def plot_robustness(noise_results, sample_results, save_path):
 def plot_full_correlation_matrix(corr_matrix, save_path):
     """Plot full N x N correlation matrix."""
     plt.figure(figsize=(12, 10))
-    sns.heatmap(corr_matrix, cmap='RdBu_r', center=0, vmin=-1, vmax=1)
+    sns.heatmap(corr_matrix, cmap='coolwarm', cbar=True, center=0, vmin=-1, vmax=1)
     plt.title(f'Full Correlation Matrix ({corr_matrix.shape[0]}x{corr_matrix.shape[1]})')
     plt.xlabel('Subjects (Rest)')
     plt.ylabel('Subjects (Task)')
@@ -953,7 +1012,9 @@ def generate_manuscript_report(all_results, output_dir):
             f.write(f"Bootstrap Mean Accuracy: {b['mean']:.4f} +/- {b['std']:.4f}\n")
             f.write(f"95% Confidence Interval: [{b['ci_lower']:.4f}, {b['ci_upper']:.4f}]\n")
         if 'permutation_p' in all_results:
-            f.write(f"Permutation Test p-value: {all_results['permutation_p']:.6f}\n")
+            f.write(f"Permutation Test (vs Chance) p-value: {all_results['permutation_p']:.6f}\n")
+        if 'paired_permutation_p' in all_results:
+            f.write(f"Paired Permutation Test (vs Baseline) p-value: {all_results['paired_permutation_p']:.6f}\n")
         if 'mcnemar_p' in all_results:
             f.write(f"McNemar Test p-value: {all_results['mcnemar_p']:.6f}\n")
         f.write("\n")
@@ -1142,8 +1203,8 @@ def run_complete_analysis(n_subjects=100, task="motor", use_synthetic=True, n_fo
         all_results['bootstrap'] = bootstrap
         
         # Permutation test
-        baseline_acc = ablation['raw_fc']['metrics']['top_1_accuracy']
-        p_val, _ = permutation_test(proposed_acc, baseline_acc, fc_refined, n_permutations=500)
+        # Tests if the proposed identification rate is significantly better than random guessing
+        p_val, _ = permutation_test(proposed_acc, fc_refined, n_permutations=500)
         all_results['permutation_p'] = p_val
         
         # McNemar's test
@@ -1151,6 +1212,10 @@ def run_complete_analysis(n_subjects=100, task="motor", use_synthetic=True, n_fo
         preds_baseline = np.argmax(ablation['raw_fc']['corr_matrix'], axis=1) == np.arange(n_subjects)
         mcnemar_stat, mcnemar_p = mcnemar_test(preds_model, preds_baseline)
         all_results['mcnemar_p'] = mcnemar_p
+        
+        # Paired Permutation Test (Model vs Baseline)
+        paired_p, _ = paired_permutation_test(preds_model, preds_baseline, n_permutations=1000)
+        all_results['paired_permutation_p'] = paired_p
         
         # Similarity distributions
         plot_similarity_distributions(fc_refined, os.path.join(run_dir, "similarity_dist.png"))
@@ -1204,7 +1269,9 @@ def run_complete_analysis(n_subjects=100, task="motor", use_synthetic=True, n_fo
     print(f"  Baseline Accuracy:  {ablation['raw_fc']['metrics']['top_1_accuracy']:.4f}")
     print(f"  Proposed Accuracy:  {proposed_acc:.4f}")
     if 'permutation_p' in all_results:
-        print(f"  P-value:            {all_results['permutation_p']:.6f}")
+        print(f"  P-value (vs Chance): {all_results['permutation_p']:.6f}")
+    if 'paired_permutation_p' in all_results:
+        print(f"  P-value (vs Baseline): {all_results['paired_permutation_p']:.6f}")
     
     return all_results, run_dir
 
@@ -1220,11 +1287,31 @@ if __name__ == "__main__":
     ALL_TASKS = ["motor", "wm", "emotion", "gambling", "language", "relational", "social"]
     N_FOLDS = 5
     
+    # ===== HYPERPARAMETER CONFIGURATION =====
+    # Set to TRUE to run automatic Grid Search (slow)
+    # Set to FALSE to use the manually tuned parameters below (fast)
+    PERFORM_GRID_SEARCH = False
+    
+    # Manually Tuned Parameters (K, L) for each task
+    # Replace (15, 12) with your specific values found from previous tuning runs
+    TUNED_PARAMS = {
+        "motor": (14, 12),
+        "wm": (15, 13),
+        "emotion": (15, 13),
+        "gambling": (14, 11),
+        "language": (15, 11),
+        "relational": (11, 9),
+        "social": (15, 9)
+    }
+    
     # Track all run directories
     all_run_dirs = []
     
     print(f"Starting Multi-Task Analysis for: {ALL_TASKS}")
     print(f"USING FULL DATASET (N={N_SUBJECTS}) - THIS WILL TAKE TIME")
+    print(f"Grid Search Enabled: {PERFORM_GRID_SEARCH}")
+    if not PERFORM_GRID_SEARCH:
+        print("Using manually defined parameters from TUNED_PARAMS.")
     
     # Filter tasks based on actual data availability
     AVAILABLE_TASKS = []
@@ -1305,95 +1392,104 @@ if __name__ == "__main__":
         print(f"{'#'*60}\n")
         
         try:
-            # Step 0: Optimize Hyperparameters for this task
-            # Step 0: Optimize Hyperparameters for this task
-            print(f">>> Optimization: Finding best K and L for {task_name}...")
+            # Step 0: Hyperparameters
+            best_K = 2
+            best_L = 2
             
-            # Ensure Data Exists
-            if not USE_SYNTHETIC:
-                rest_path = os.path.join(FC_DATA_DIR, "fc_rest.npy")
-                task_path = os.path.join(FC_DATA_DIR, f"fc_{task_name}.npy")
+            if PERFORM_GRID_SEARCH:
+                print(f">>> Optimization: Running Grid Search for {task_name}...")
                 
-                # Check if we need to generate data
-                if not os.path.exists(rest_path) or not os.path.exists(task_path):
-                    print("    Data missing for optimization. Generating now...")
-                    os.makedirs(FC_DATA_DIR, exist_ok=True)
+                # Ensure Data Exists
+                if not USE_SYNTHETIC:
+                    rest_path = os.path.join(FC_DATA_DIR, "fc_rest.npy")
+                    task_path = os.path.join(FC_DATA_DIR, f"fc_{task_name}.npy")
                     
-                    # Generate if checking RAW directories works
-                    if RAW_REST_DIR and RAW_TASK_DIR:
-                        # Get subject list
-                        subjects_path = os.path.join(RAW_REST_DIR, "subjects")
-                        if os.path.exists(subjects_path):
-                            all_subs = sorted([d for d in os.listdir(subjects_path) 
-                                               if os.path.isdir(os.path.join(subjects_path, d))])
-                            # Use N_SUBJECTS limit
-                            if len(all_subs) > N_SUBJECTS:
-                                all_subs = all_subs[:N_SUBJECTS]
+                    # Check if we need to generate data
+                    if not os.path.exists(rest_path) or not os.path.exists(task_path):
+                        print("    Data missing for optimization. Generating now...")
+                        os.makedirs(FC_DATA_DIR, exist_ok=True)
+                        
+                        # Generate if checking RAW directories works
+                        if RAW_REST_DIR and RAW_TASK_DIR:
+                            # Get subject list
+                            subjects_path = os.path.join(RAW_REST_DIR, "subjects")
+                            if os.path.exists(subjects_path):
+                                all_subs = sorted([d for d in os.listdir(subjects_path) 
+                                                   if os.path.isdir(os.path.join(subjects_path, d))])
+                                # Use N_SUBJECTS limit
+                                if len(all_subs) > N_SUBJECTS:
+                                    all_subs = all_subs[:N_SUBJECTS]
+                                    
+                                print(f"    Generating FC for {len(all_subs)} subjects...")
                                 
-                            print(f"    Generating FC for {len(all_subs)} subjects...")
-                            
-                            # Generate Rest if missing
-                            if not os.path.exists(rest_path):
-                                fc_r, r_subs = generate_fc_for_task("rest", all_subs, RAW_REST_DIR)
-                                np.save(rest_path, fc_r)
-                                print(f"    Saved {rest_path}")
-                                
-                            # Generate Task if missing
-                            if not os.path.exists(task_path):
-                                fc_t, t_subs = generate_fc_for_task(task_name, all_subs, RAW_TASK_DIR)
-                                np.save(task_path, fc_t)
-                                print(f"    Saved {task_path}")
+                                # Generate Rest if missing
+                                if not os.path.exists(rest_path):
+                                    fc_r, r_subs = generate_fc_for_task("rest", all_subs, RAW_REST_DIR)
+                                    np.save(rest_path, fc_r)
+                                    print(f"    Saved {rest_path}")
+                                    
+                                # Generate Task if missing
+                                if not os.path.exists(task_path):
+                                    fc_t, t_subs = generate_fc_for_task(task_name, all_subs, RAW_TASK_DIR)
+                                    np.save(task_path, fc_t)
+                                    print(f"    Saved {task_path}")
+                            else:
+                                print(f"    WARNING: Raw subjects path not found: {subjects_path}")
                         else:
-                            print(f"    WARNING: Raw subjects path not found: {subjects_path}")
-                    else:
-                        print("    WARNING: RAW_REST_DIR or RAW_TASK_DIR not set. Cannot generate data.")
+                            print("    WARNING: RAW_REST_DIR or RAW_TASK_DIR not set. Cannot generate data.")
 
-            if not USE_SYNTHETIC and os.path.exists(FC_DATA_DIR):
-                rest_path = os.path.join(FC_DATA_DIR, "fc_rest.npy")
-                task_path = os.path.join(FC_DATA_DIR, f"fc_{task_name}.npy")
-                
-                if os.path.exists(rest_path) and os.path.exists(task_path):
-                    # Load FULL dataset for robust optimization
-                    full_rest = np.load(rest_path)
-                    full_task = np.load(task_path)
+                if not USE_SYNTHETIC and os.path.exists(FC_DATA_DIR):
+                    rest_path = os.path.join(FC_DATA_DIR, "fc_rest.npy")
+                    task_path = os.path.join(FC_DATA_DIR, f"fc_{task_name}.npy")
                     
-                    # Slice if we generated more than N_SUBJECTS or fewer
-                    if full_rest.shape[0] > N_SUBJECTS:
-                        full_rest = full_rest[:N_SUBJECTS]
-                        full_task = full_task[:N_SUBJECTS]
-                    
-                    n_p = full_rest.shape[1]
-                    tril = np.tril_indices(n_p, k=-1)
-                    
-                    flat_rest = np.array([full_rest[i][tril] for i in range(len(full_rest))])
-                    flat_task = np.array([full_task[i][tril] for i in range(len(full_task))])
-                    
-                    Y_opt = flat_task.T
-                    
-                    print(f"    Running Full Grid Search (on {len(full_rest)} subjects)...")
-                    
-                    # Broad Search Range (2 to 16 as requested)
-                    search_k_range = list(range(2, 17, 1))
-                    
-                    _, best_k_found, best_l_found = perform_grid_search(
-                        Y_opt, flat_rest.T, len(full_rest), n_p, 
-                        K_range=search_k_range, 
-                        L_max=None, 
-                        n_iter=10,
-                        task_name=task_name 
-                    )
-                    
-                    best_K = best_k_found
-                    best_L = best_l_found
+                    if os.path.exists(rest_path) and os.path.exists(task_path):
+                        # Load FULL dataset for robust optimization
+                        full_rest = np.load(rest_path)
+                        full_task = np.load(task_path)
+                        
+                        # Slice if we generated more than N_SUBJECTS or fewer
+                        if full_rest.shape[0] > N_SUBJECTS:
+                            full_rest = full_rest[:N_SUBJECTS]
+                            full_task = full_task[:N_SUBJECTS]
+                        
+                        n_p = full_rest.shape[1]
+                        tril = np.tril_indices(n_p, k=-1)
+                        
+                        flat_rest = np.array([full_rest[i][tril] for i in range(len(full_rest))])
+                        flat_task = np.array([full_task[i][tril] for i in range(len(full_task))])
+                        
+                        Y_opt = flat_task.T
+                        
+                        print(f"    Running Full Grid Search (on {len(full_rest)} subjects)...")
+                        
+                        # Broad Search Range (2 to 16 as requested)
+                        search_k_range = list(range(2, 17, 1))
+                        
+                        _, best_k_found, best_l_found = perform_grid_search(
+                            Y_opt, flat_rest.T, len(full_rest), n_p, 
+                            K_range=search_k_range, 
+                            L_max=None, 
+                            n_iter=10,
+                            task_name=task_name 
+                        )
+                        
+                        best_K = best_k_found
+                        best_L = best_l_found
+                    else:
+                        print(f"    Could not load data for grid search for {task_name}. Using defaults.")
                 else:
-                    print(f"    Could not load data for grid search for {task_name}. Using defaults.")
                     best_K = 15
                     best_L = 12
             else:
-                best_K = 15
-                best_L = 12
+                # MANUAL PARAMETERS
+                print(f">>> Optimization: Using Pre-Tuned Parameters for {task_name}...")
+                if task_name in TUNED_PARAMS:
+                    best_K, best_L = TUNED_PARAMS[task_name]
+                    print(f"    Found in TUNED_PARAMS: K={best_K}, L={best_L}")
+                else:
+                    raise ValueError(f"CRITICAL ERROR: {task_name} not found in TUNED_PARAMS and Grid Search is disabled. Please add (K, L) for this task or enable Grid Search.")
             
-            print(f">>> Using Human-Validated Optimal Hyperparameters: K={best_K}, L={best_L}")
+            print(f">>> Final Hyperparameters: K={best_K}, L={best_L}")
 
             results, run_dir = run_complete_analysis(
                 n_subjects=N_SUBJECTS,

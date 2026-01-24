@@ -20,8 +20,8 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../')))
 
 from models.conv_ae import ConvAutoencoder
-from models.sparse_dictionary_learning import k_svd
-from utils.matrix_ops import calculate_accuracy
+from models.sparse_dictionary_learning import k_svd, omp_sparse_coding
+from utils.matrix_ops import calculate_accuracy, reconstruct_symmetric_matrix
 
 
 class CrossValidation:
@@ -54,42 +54,64 @@ class CrossValidation:
                 optimizer.step()
         return model
 
-    def _compute_fingerprinting_accuracy(self, model: ConvAutoencoder, dictionary: np.ndarray,
-                                       task_data: np.ndarray, rest_data: np.ndarray) -> float:
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        model.eval()
-        with torch.no_grad():
-            task_tensor = torch.from_numpy(task_data).float().unsqueeze(1).to(device)
-            rest_tensor = torch.from_numpy(rest_data).float().unsqueeze(1).to(device)
-            task_encoded = model.encoder(task_tensor).cpu().numpy().reshape(len(task_data), -1)
-            rest_encoded = model.encoder(rest_tensor).cpu().numpy().reshape(len(rest_data), -1)
-            
-        # For simplicity in CV, we use the encoded features directly if SDL is too slow
-        # Or apply a pre-calculated dictionary
-        n = len(task_data)
-        corr_matrix = np.corrcoef(task_encoded, rest_encoded)[:n, n:]
-        return calculate_accuracy(corr_matrix)
-
     def run_cross_validation(self, fc_task: np.ndarray, fc_rest: np.ndarray, 
-                           output_dir: str) -> Dict:
+                           output_dir: str, K: int = 15, L: int = 12) -> Dict:
         os.makedirs(output_dir, exist_ok=True)
         accuracies = []
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
         for fold, (train_idx, test_idx) in enumerate(self.kf.split(fc_task)):
             print(f"Running Fold {fold+1}/{self.n_splits}...")
             
-            # Split data
-            # To prevent data leakage, we only train on task data of training subjects
-            # and evaluate on test subjects
+            # Split
             train_task = fc_task[train_idx]
             test_task = fc_task[test_idx]
             test_rest = fc_rest[test_idx]
             
-            # Train model only on training subjects
+            # 1. Train ConvAE
             model = self._train_autoencoder(train_task, None, epochs=10)
+            model.eval()
             
-            # Evaluate on test subjects
-            acc = self._compute_fingerprinting_accuracy(model, None, test_task, test_rest)
+            # 2. Compute Residuals
+            with torch.no_grad():
+                train_tensor = torch.from_numpy(train_task).float().unsqueeze(1).to(device)
+                test_tensor = torch.from_numpy(test_task).float().unsqueeze(1).to(device)
+                
+                train_recon = model(train_tensor).cpu().numpy().squeeze()
+                test_recon = model(test_tensor).cpu().numpy().squeeze()
+            
+            res_train = train_task - train_recon
+            res_test = test_task - test_recon
+            
+            # 3. K-SVD on Train
+            # Flatten lower triangle
+            n_parcels = train_task.shape[1]
+            tril_idx = np.tril_indices(n_parcels, k=-1)
+            
+            Y_train = np.array([res[tril_idx] for res in res_train]).T
+            Y_test = np.array([res[tril_idx] for res in res_test]).T
+            
+            # Learn Dictionary
+            D_train, _ = k_svd(Y_train, K, L, n_iter=5, verbose=False, random_state=42)
+            
+            # 4. Refine Test
+            X_test = omp_sparse_coding(Y_test, D_train, L)
+            shared_noise = (D_train @ X_test).T
+            
+            refined_test = []
+            for i in range(len(test_task)):
+                 # Reconstruct noise matrix
+                 noise_mat = reconstruct_symmetric_matrix(shared_noise[i], n_parcels)
+                 # Subtract noise from residual
+                 refined_test.append(res_test[i] - noise_mat)
+            
+            refined_test = np.array(refined_test)
+            
+            # 5. Calculate Accuracy against Rest
+            corr = np.corrcoef(refined_test.reshape(len(refined_test), -1), 
+                               test_rest.reshape(len(test_rest), -1))[:len(test_task), len(test_task):]
+            
+            acc = calculate_accuracy(corr)
             accuracies.append(acc)
             print(f"Fold {fold+1} Accuracy: {acc:.4f}")
             

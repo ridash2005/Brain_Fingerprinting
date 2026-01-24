@@ -1,6 +1,8 @@
 """
 Sparse Dictionary Learning Module for Functional Connectome Fingerprinting
 
+Copyright (c) 2026 Rickarya Das. All rights reserved.
+
 Addresses Reviewer Comments:
 - Reviewer 1, Point 4: SDL implementation underspecified
 - Reviewer 2, Point 1(1): Role of sparse dictionary learning unclear
@@ -344,6 +346,100 @@ def grid_search_hyperparameters(
         'best_score': best_score,
         'all_results': results
     }
+
+
+
+def calculate_accuracy_inline(corr_matrix):
+    """
+    Calculate Top-1 accuracy.
+    Inline version to avoid circular imports.
+    """
+    if corr_matrix is None or corr_matrix.size == 0:
+        return 0.0
+    
+    n = corr_matrix.shape[0]
+    correct = sum(1 for i in range(n) if np.argmax(corr_matrix[i, :]) == i)
+    return correct / n
+
+
+def perform_grid_search(
+    Y: np.ndarray, 
+    rest_flat: Optional[np.ndarray], 
+    n_subjects: int, 
+    n_features: int, 
+    K_range: Tuple[int, int] = (2, 16), 
+    n_iter: int = 3, 
+    task_name: str = "unknown"
+) -> Tuple[np.ndarray, int, int]:
+    """
+    Grid search for optimal K and L parameters based on Identification Accuracy.
+    
+    Parameters
+    ----------
+    Y : np.ndarray
+        Task data matrix (n_features x n_samples)
+    rest_flat : np.ndarray, optional
+        Rest data matrix for matching (n_features x n_samples)
+    n_subjects : int
+        Number of subjects
+    n_features : int
+        Number of features
+    K_range : tuple
+        (min_K, max_K) for grid search
+    n_iter : int
+        Number of iterations for K-SVD
+    task_name : str
+        Name of task for logging
+        
+    Returns
+    -------
+    accuracies : np.ndarray
+        Grid of accuracies
+    best_K : int
+        Optimal K
+    best_L : int
+        Optimal L
+    """
+    print(f"  Grid Search K={K_range} for {task_name}...")
+    
+    Ks = range(K_range[0], K_range[1] + 1, 2)
+    accuracies = np.zeros((len(Ks), len(Ks)))
+    
+    best_acc = -1.0
+    best_K = 15
+    best_L = 12
+    
+    for i, K in enumerate(Ks):
+        L_vals = range(2, K + 1, 2)
+        for j, L in enumerate(L_vals):
+            # Run simplified K-SVD
+            D, X = k_svd(Y, K, L, n_iter=n_iter, verbose=False, random_state=42)
+            
+            if rest_flat is not None:
+                # Approximate Rest Sparse Codes using learned D
+                X_rest = omp_sparse_coding(rest_flat[:, :n_subjects], D, L)
+                X_task = X[:, :n_subjects]
+                
+                # Correlation between sparse codes
+                corr = np.corrcoef(X_task.T, X_rest.T)[:n_subjects, n_subjects:]
+                acc = calculate_accuracy_inline(corr)
+                
+                if j < len(Ks): # Safety check for indexing
+                    accuracies[i, j] = acc
+                
+                if acc > best_acc:
+                    best_acc = acc
+                    best_K = K
+                    best_L = L
+                
+                print(f"    K={K}, L={L} -> Acc={acc:.4f}")
+            else:
+                # Fallback purely on reconstruction error (not implemented here for brevity)
+                pass
+
+    print(f"  Found Optimal: K={best_K}, L={best_L} (Acc: {best_acc:.4f})")
+    
+    return accuracies, best_K, best_L
 
 
 # Documentation for usage

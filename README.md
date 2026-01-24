@@ -17,7 +17,10 @@ The core objective is to extract "refined" functional connectomes that are more 
 
 ```text
 ├── config/              # Configuration parameters (HCP paths, constants)
-├── docs/                # Detailed documentation and images
+├── docs/                # Project Documentation
+│   ├── ARCHITECTURE_OVERVIEW.md       # High-level system design
+│   ├── PIPELINE_EXPLANATION.md        # Detailed algorithm logic
+│   └── COMPARISON_NOTEBOOK_VS_PIPELINE.md # Guide: Notebook vs Script
 ├── logs/                # Execution logs and hyperparameter search results
 ├── notebooks/           # Research and exploration notebooks
 ├── results/             # Output directory for plots and accuracy metrics
@@ -82,10 +85,9 @@ python -W ignore src/processing/refine_whole_brain.py -task motor
 python src/processing/refine_whole_brain_avg.py -task motor
 
 ### 5. Manuscript Analysis (All-in-One)
-To run the full suite of experiments (Ablation, Stats, SOTA, CV) for the manuscript:
+To run the full suite of experiments (Ablation, Stats, SOTA, CV) for the manuscript. This script automatically performs **Integrated Hyperparameter Tuning** (Grid Search) before running the pipeline:
 ```bash
 python src/analysis/run_complete_analysis.py --task motor --n_permutations 1000
-```
 ```
 
 ### 6. Kaggle & Notebooks
@@ -93,7 +95,9 @@ A self-contained, high-performance notebook script is available for Kaggle users
 1.  Open `notebooks/kaggle_brain_fingerprinting.py`.
 2.  In VS Code, use **"Export to Jupyter Notebook"** or simply copy-paste cells into a Kaggle kernel.
 3.  Set `use_synthetic=False` to run on real data after uploading your matrices.
-Search for optimal K (atoms) and L (sparsity) for SDL:
+
+**Standalone Optimization**:
+If you wish to search for optimal K and L separately:
 ```bash
 python src/processing/optimize_hyperparameters.py -data rest -task motor
 ```

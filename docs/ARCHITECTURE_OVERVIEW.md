@@ -1,4 +1,4 @@
-# Brain Fingerprinting Project Documentation
+# Brain Fingerprinting: Architecture Overview
 
 This document provides a comprehensive overview of the **Brain Fingerprinting** project. This repository implements a pipeline for individual identification (fingerprinting) from fMRI Functional Connectivity (FC) matrices, utilizing Convolutional Autoencoders (ConvAE) and Sparse Dictionary Learning (SDL) to refine signals and improve accuracy.
 

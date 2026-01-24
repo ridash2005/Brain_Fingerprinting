@@ -324,6 +324,49 @@ class TestModelArchitecture(unittest.TestCase):
         self.assertLess(n_params, 500000)
 
 
+class TestSparseDictionaryLearning(unittest.TestCase):
+    """Test sparse dictionary learning module (Reviewer 2, Point 1)."""
+    
+    def setUp(self):
+        self.n_samples = 20
+        self.n_features = 50
+        np.random.seed(42)
+        self.Y = np.random.randn(self.n_features, self.n_samples)
+        
+    def test_k_svd_execution(self):
+        """Test K-SVD runs and returns correct shapes."""
+        from src.models.sparse_dictionary_learning import k_svd
+        K, L = 5, 3
+        D, X = k_svd(self.Y, K=K, L=L, n_iter=2, verbose=False)
+        
+        self.assertEqual(D.shape, (self.n_features, K))
+        self.assertEqual(X.shape, (K, self.n_samples))
+        # Check dictionary atoms are normalized
+        norms = np.linalg.norm(D, axis=0)
+        np.testing.assert_almost_equal(norms, np.ones(K))
+        
+    def test_perform_grid_search(self):
+        """Test grid search parameter tuning."""
+        from src.models.sparse_dictionary_learning import perform_grid_search
+        
+        # Create a "rest" matrix similar to task for matching
+        rest_flat = self.Y + 0.1 * np.random.randn(*self.Y.shape)
+        
+        accuracies, best_K, best_L = perform_grid_search(
+            self.Y, rest_flat, 
+            n_subjects=self.n_samples, 
+            n_features=self.n_features,
+            K_range=(4, 6),
+            n_iter=1,
+            task_name="test"
+        )
+        
+        self.assertIsInstance(best_K, int)
+        self.assertIsInstance(best_L, int)
+        self.assertTrue(best_L <= best_K)
+        self.assertGreaterEqual(np.max(accuracies), 0.0)
+
+
 class TestIntegration(unittest.TestCase):
     """Integration tests for complete pipeline."""
     
