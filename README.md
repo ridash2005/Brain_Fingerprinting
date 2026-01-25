@@ -1,124 +1,127 @@
-# Brain Fingerprinting
+# Brain Fingerprinting: Functional Connectome Identification
 
 [![License: Proprietary](https://img.shields.io/badge/License-Proprietary-red.svg)](#-license)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Status](https://img.shields.io/badge/Status-Research_Grade-success.svg)]()
+[![Report](https://img.shields.io/badge/View-Comprehensive_Report-orange.svg)](COMPREHENSIVE_REPORT.md)
 
-This repository implements a robust pipeline for **Brain Fingerprinting** using Functional Connectivity (FC) matrices derived from HCP fMRI data. It features a novel refinement mechanism combining **Convolutional Autoencoders** and **Sparse Dictionary Learning (SDL)** to denoise task-based signals and improve subject identification accuracy.
+> **"State-of-the-Art Subject Identification from fMRI Data using Contrastive Autoencoders and Sparse Dictionary Learning"**
 
-## 🚀 Project Overview
+---
 
-The core objective is to extract "refined" functional connectomes that are more consistent across different mental states (rest vs tasks) than the raw signals. Our pipeline consists of:
-1. **Denoising**: Using a trained Autoencoder to remove common task-related components.
-2. **Refinement**: Applying Sparse Dictionary Learning (K-SVD) to the residuals to capture the individual's unique fingerprint.
+## 🧠 Project Overview
+
+**Brain Fingerprinting** is a deep learning framework designed to extract robust, subject-specific signatures from functional magnetic resonance imaging (fMRI) data. Unlike traditional correlation-based methods, this pipeline leverages a **Hybrid Deep Learning Architecture**—combining Convolutional Autoencoders for non-linear dimensionality reduction with K-SVD Sparse Dictionary Learning for robust pattern matching.
+
+This approach effectively denoises task-specific signals to reveal the underlying "intrinsic functional connectivity" that is unique to each individual, achieving significant improvements in identification accuracy across diverse cognitive tasks.
+
+### 🌟 Key Performance Highlights
+
+| Metric | Baseline (Finn et al., 2015) | **Proposed Method** | Improvement |
+| :--- | :---: | :---: | :---: |
+| **Mean Accuracy** | 32.81% | **75.64%** | **+136%** 🚀 |
+| **Best Case (Language)** | 35.10% | **82.01%** | **+133%** |
+| **Robustness (Relational)** | 23.01% | **68.44%** | **+197%** |
+
+*Verified on the Human Connectome Project (HCP) S900 release (N=339).*
+
+👉 **[Read the Full Analysis Report](COMPREHENSIVE_REPORT.md)** for detailed metrics, p-values, and visualizations for every task.
+
+---
+
+## 📊 Visual Validation
+
+The following heatmap demonstrates the **Reconstruction Similarity Matrix** (Language Task). The sharp, bright diagonal indicates high self-similarity (the model correctly identifying the subject against themselves), while the dark off-diagonal regions show low confusion with other subjects.
+
+![Identification Heatmap](docs/assets/hero_heatmap.png)
+*Figure 1: Reconstruction Similarity Matrix showing clear separation between intra-subject (diagonal) and inter-subject (off-diagonal) connectivity patterns.*
 
 ---
 
 ## 📂 Repository Structure
 
 ```text
-├── config/              # Configuration parameters (HCP paths, constants)
-├── docs/                # Project Documentation
-│   ├── ARCHITECTURE_OVERVIEW.md       # High-level system design
-│   ├── PIPELINE_EXPLANATION.md        # Detailed algorithm logic
-│   └── COMPARISON_NOTEBOOK_VS_PIPELINE.md # Guide: Notebook vs Script
-├── logs/                # Execution logs and hyperparameter search results
-├── notebooks/           # Research and exploration notebooks
-├── results/             # Output directory for plots and accuracy metrics
-├── src/                 # Core Source Code
-│   ├── data/            # Data acquisition and preprocessing
-│   ├── models/          # Neural Network architectures and SDL
-│   ├── processing/      # Full-brain and network-specific pipelines
-│   ├── utils/           # Helper functions for matrix ops and parsing
-│   └── visualization/   # Plotting scripts
-├── tests/               # Script verification and unit tests
-└── requirements.txt     # Project dependencies
+├── config/              # Configuration files & path definitions
+├── docs/                # Documentation & Architecture diagrams
+├── notebooks/           # Jupyter notebooks for exploration & Kaggle
+├── report_assets/       # Generated plots and figures for reports
+├── results/             # Raw output data (logs, npy files)
+├── scripts/             # Utility scripts (report generation, etc.)
+├── src/                 # Research Implementation
+│   ├── data/            # Data loading & HCP preprocessing logic
+│   ├── models/          # PyTorch Models (ConvAE) & SKLearn (Dictionary Learning)
+│   ├── processing/      # Core pipeline drivers (training, refinement)
+│   └── visualization/   # Plotting utilities
+├── COMPREHENSIVE_REPORT.md # Generated full analysis report
+├── requirements.txt     # Python dependencies
+└── README.md            # Project landing page
 ```
 
 ---
 
-## 🛠️ Setup & Installation
+## 🚀 Getting Started
 
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/yourusername/Brain_Fingerprinting.git
-   cd Brain_Fingerprinting
-   ```
+### Prerequisites
+- Python 3.8+
+- PyTorch 1.7+
+- CUDA-capable GPU (recommended)
 
-2. **Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
+### Installation
 
-3. **Configure Paths**:
-   Update `config/basic_parameters.txt` with your local HCP data directory path (absolute path recommended).
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/ridash2005/Brain_Fingerprinting.git
+    cd Brain_Fingerprinting
+    ```
+
+2.  **Install dependencies:**
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+3.  **Data Setup:**
+    - Ensure you have access to the **HCP S900** dataset (rest and task fMRI).
+    - Update `config/basic_parameters.txt` to point to your local data path.
 
 ---
 
-## 📖 Usage Instructions
+## 🧪 Usage Examples
 
-### 1. Data Acquisition
-To download and extract the HCP dataset (339 subjects, Glasser parcellation):
-```bash
-python src/data/download_hcp_data.py
-```
-*Use `--dry-run` to check connectivity without downloading.*
-
-### 2. Generate Functional Connectivity (FC)
-Generate whole-brain FC matrices from timeseries:
-```bash
-python src/processing/generate_whole_brain_fc.py -task motor
-```
-
-### 3. Model Training
-Train the Convolutional Autoencoder on resting-state data:
-```bash
-python src/train_model.py -model conv_ae -data rest
-```
-
-### 4. Refinement & Identification
-Run the refinement pipeline to calculate identification accuracy:
-```bash
-# Using trained Autoencoder
-python -W ignore src/processing/refine_whole_brain.py -task motor
-
-# Using Group-Average Baseline
-python src/processing/refine_whole_brain_avg.py -task motor
-
-### 5. Manuscript Analysis (All-in-One)
-To run the full suite of experiments (Ablation, Stats, SOTA, CV) for the manuscript. This script automatically performs **Integrated Hyperparameter Tuning** (Grid Search) before running the pipeline:
+### 1. Run the Full Manuscript Analysis
+Reproduce the results found in the report by running the automated analysis suite. This handles hyperparameter tuning, model training, and evaluation.
 ```bash
 python src/analysis/run_complete_analysis.py --task motor --n_permutations 1000
 ```
 
-### 6. Kaggle & Notebooks
-A self-contained, high-performance notebook script is available for Kaggle users:
-1.  Open `notebooks/kaggle_brain_fingerprinting.py`.
-2.  In VS Code, use **"Export to Jupyter Notebook"** or simply copy-paste cells into a Kaggle kernel.
-3.  Set `use_synthetic=False` to run on real data after uploading your matrices.
-
-**Standalone Optimization**:
-If you wish to search for optimal K and L separately:
+### 2. Train the Autoencoder (Step-by-Step)
+If you prefer to run individual components:
 ```bash
-python src/processing/optimize_hyperparameters.py -data rest -task motor
+# Train on Resting State Data
+python src/train_model.py -model conv_ae -data rest
 ```
-Then visualize the results:
+
+### 3. Generate Fingerprints
 ```bash
-python src/visualization/plot_optimization_heatmap.py -log logs/accuracy_log_rest_to_motor.txt
+# Apply refinement to Motor Task data
+python src/processing/refine_whole_brain.py -task motor
 ```
 
 ---
 
-## 📊 Results & Logging
+## 📜 Methodology
 
-To ensure reproducibility and easy comparison between experiments, all outputs are organized by **Run ID** (timestamped):
-- **Visualizations & Metrics**: Stored in `results/runs/YYYYMMDD_HHMMSS_{experiment_name}/`
-- **Optimization Logs**: Stored in `logs/runs/YYYYMMDD_HHMMSS_{experiment_name}/`
-- **Models**: Every training run saves a backup of the best model in its specific run directory, while maintaining the latest production model in `src/models/trained/`.
+1.  **Preprocessing**: Glasser 2016 Parcellation (360 regions) applied to HCP time-series.
+2.  **Feature Extraction**: A **Convolutional Autoencoder** compresses the 360x360 FC matrices, learning to reconstruct the robust "core" connectivity.
+3.  **Refinement**: **Sparse Dictionary Learning (K-SVD)** allows the model to ignore common task-evoked patterns (noise) and focus on sparse, subject-specific atoms.
+4.  **Identification**: Subjects are identified by maximizing the correlation between their "refined" connectome fingerprints.
 
-Our pipeline significantly improves subject identification accuracy over baseline methods (Finn et al., 2015).
+For a deep dive into the architecture, please see [`docs/ARCHITECTURE_OVERVIEW.md`](docs/ARCHITECTURE_OVERVIEW.md).
+
+---
 
 ## 🤝 Contributing
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+Contributions are welcome! Please examine the `logs/` directory for hints on current model performance and check `CONTRIBUTING.md` for guidelines.
 
-## 📜 License
-This project is proprietary and copyrighted. All rights reserved by **Rickarya Das**. See the [LICENSE](LICENSE) file for the full legal text and usage restrictions.
+## 📄 License
+This project is proprietary. All rights reserved by **Rickarya Das**.
+See [LICENSE](LICENSE) for details.
