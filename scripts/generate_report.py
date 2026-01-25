@@ -140,7 +140,7 @@ def generate_markdown(all_results, output_file):
         
         f.write("\n### Statistical Tests\n")
         f.write("- **Permutation Test:** Evaluates if the performance is significantly better than random chance by shuffling labels (1000 iterations).\n")
-        f.write("- **McNemar Test:** A paired non-parametric test to compare the proposed method against the baseline on a per-subject basis.\n")
+        f.write("- **McNemar Test:** A paired non-parametric test used to compare the performance of two classifiers (Proposed vs. Baseline) on the same subjects. It specifically analyzes the cases where the models disagree. A **p-value < 0.05** indicates that the difference in accuracy is statistically significant and not due to random chance.\n")
         f.write("- **Bootstrap Confidence Intervals:** 95% CI calculated using 1000 bootstrap samples to estimate uncertainty.\n")
 
         # 2. Aggregate Summary

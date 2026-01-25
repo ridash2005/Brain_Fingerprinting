@@ -1,6 +1,6 @@
 # Comprehensive Brain Fingerprinting Analysis Report
 
-**Generated on:** 2026-01-25 11:14:55
+**Generated on:** 2026-01-25 11:20:36
 
 ## 1. Methodology & Metrics Explanation
 
@@ -12,7 +12,7 @@
 
 ### Statistical Tests
 - **Permutation Test:** Evaluates if the performance is significantly better than random chance by shuffling labels (1000 iterations).
-- **McNemar Test:** A paired non-parametric test to compare the proposed method against the baseline on a per-subject basis.
+- **McNemar Test:** A paired non-parametric test used to compare the performance of two classifiers (Proposed vs. Baseline) on the same subjects. It specifically analyzes the cases where the models disagree. A **p-value < 0.05** indicates that the difference in accuracy is statistically significant and not due to random chance.
 - **Bootstrap Confidence Intervals:** 95% CI calculated using 1000 bootstrap samples to estimate uncertainty.
 
 ## 2. Aggregate Performance Summary
