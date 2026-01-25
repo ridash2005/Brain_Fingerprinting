@@ -211,8 +211,22 @@ def generate_markdown(all_results, output_file):
             for row in data['ablation']:
                 f.write(f"| {row['Method']} | {row['Acc']} | {row['Top-5']} | {row['MRR']} |\n")
                 
-            # 3.3 Statistical Validation
-            f.write("\n#### C. Statistical Validation\n")
+            # 3.3 State-of-the-Art Comparison
+            f.write("\n#### C. State-of-the-Art Comparison\n")
+            f.write("Comparison with existing methods and baselines:\n\n")
+            
+            f.write("**Method Descriptions:**\n")
+            f.write("- **finn_2015:** The standard functional fingerprinting baseline using Pearson correlation of whole-brain functional connectivity matrices (Finn et al., 2015).\n")
+            f.write("- **edge_sel_Xpct:** A baseline method that selects only the top X% of edges with the highest discriminative power (differential identifiability) before correlation.\n")
+            f.write("- **proposed:** The proposed method utilizing Latent Reconstruction Error from the ConVAE-SDL architecture.\n\n")
+
+            f.write("| Method | Accuracy |\n")
+            f.write("|---|---|\n")
+            for k, v in data['sota'].items():
+                f.write(f"| {k} | {v} |\n")
+
+            # 3.4 Statistical Validation
+            f.write("\n#### D. Statistical Validation\n")
             f.write("Significance testing results:\n")
             f.write("| Test | Result | Interpretation |\n")
             f.write("|---|---|---|\n")
@@ -222,8 +236,8 @@ def generate_markdown(all_results, output_file):
             f.write(f"| Permutation Test | {stats.get('Permutation Test (vs Chance) p-value', 'N/A')} | P-value < 0.05 indicates significance over random |\n")
             f.write(f"| McNemar Test | {stats.get('McNemar Test p-value', 'N/A')} | P-value < 0.05 indicates significance over baseline |\n")
             
-            # 3.4 Robustness
-            f.write("\n#### D. Robustness Analysis\n")
+            # 3.5 Robustness
+            f.write("\n#### E. Robustness Analysis\n")
             f.write("**Noise Robustness (Accuracy vs Sigma):**\n")
             f.write("- Evaluation of model performance when Gaussian noise is added to the input time series.\n\n")
             f.write("| Noise Level (Sigma) | Accuracy |\n")
@@ -238,8 +252,8 @@ def generate_markdown(all_results, output_file):
             for k, v in data['robustness_sample'].items():
                 f.write(f"| {k} | {v} |\n")
 
-            # 3.5 Images
-            f.write("\n#### E. Visualizations\n")
+            # 3.6 Images
+            f.write("\n#### F. Visualizations\n")
             
             image_map = {
                 'heatmap_convae_sdl.png': "**Reconstruction Similarity Matrix (Proposed):**\nShows the similarity scores between all pairs of subjects. A strong diagonal indicates high self-similarity (correct identification) and low cross-similarity.",
@@ -256,6 +270,8 @@ def generate_markdown(all_results, output_file):
                 if os.path.exists(src_img_path):
                     # Copy to report_assets
                     dst_img_path = os.path.join(task_assets_dir, img_name)
+                    # Create directory if it doesn't exist (it should, but good to be safe)
+                    os.makedirs(os.path.dirname(dst_img_path), exist_ok=True)
                     shutil.copy2(src_img_path, dst_img_path)
                     
                     # Use relative path for markdown (always forward slashes)

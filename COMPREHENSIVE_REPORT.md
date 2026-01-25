@@ -1,6 +1,6 @@
 # Comprehensive Brain Fingerprinting Analysis Report
 
-**Generated on:** 2026-01-25 11:20:36
+**Generated on:** 2026-01-25 12:02:08
 
 ## 1. Methodology & Metrics Explanation
 
@@ -53,7 +53,23 @@ Comparison of different architectural choices:
 | convae_residuals | 0.4041 | 0.5369 | 0.4756 |
 | convae_sdl | 0.7935 | 0.8909 | 0.8381 |
 
-#### C. Statistical Validation
+#### C. State-of-the-Art Comparison
+Comparison with existing methods and baselines:
+
+**Method Descriptions:**
+- **finn_2015:** The standard functional fingerprinting baseline using Pearson correlation of whole-brain functional connectivity matrices (Finn et al., 2015).
+- **edge_sel_Xpct:** A baseline method that selects only the top X% of edges with the highest discriminative power (differential identifiability) before correlation.
+- **proposed:** The proposed method utilizing Latent Reconstruction Error from the ConVAE-SDL architecture.
+
+| Method | Accuracy |
+|---|---|
+| finn_2015 | 0.3363 |
+| edge_sel_5pct | 0.2419 |
+| edge_sel_10pct | 0.3068 |
+| edge_sel_20pct | 0.3540 |
+| proposed | 0.7935 |
+
+#### D. Statistical Validation
 Significance testing results:
 | Test | Result | Interpretation |
 |---|---|---|
@@ -62,7 +78,7 @@ Significance testing results:
 | Permutation Test | 0.001996 | P-value < 0.05 indicates significance over random |
 | McNemar Test | 0.000000 | P-value < 0.05 indicates significance over baseline |
 
-#### D. Robustness Analysis
+#### E. Robustness Analysis
 **Noise Robustness (Accuracy vs Sigma):**
 - Evaluation of model performance when Gaussian noise is added to the input time series.
 
@@ -85,7 +101,7 @@ Significance testing results:
 | N=271 | 0.2989 +/- 0.0126 |
 | N=339 | 0.2802 +/- 0.0000 |
 
-#### E. Visualizations
+#### F. Visualizations
 **Reconstruction Similarity Matrix (Proposed):**
 Shows the similarity scores between all pairs of subjects. A strong diagonal indicates high self-similarity (correct identification) and low cross-similarity.
 
@@ -146,7 +162,23 @@ Comparison of different architectural choices:
 | convae_residuals | 0.4690 | 0.6372 | 0.5520 |
 | convae_sdl | 0.7788 | 0.9174 | 0.8412 |
 
-#### C. Statistical Validation
+#### C. State-of-the-Art Comparison
+Comparison with existing methods and baselines:
+
+**Method Descriptions:**
+- **finn_2015:** The standard functional fingerprinting baseline using Pearson correlation of whole-brain functional connectivity matrices (Finn et al., 2015).
+- **edge_sel_Xpct:** A baseline method that selects only the top X% of edges with the highest discriminative power (differential identifiability) before correlation.
+- **proposed:** The proposed method utilizing Latent Reconstruction Error from the ConVAE-SDL architecture.
+
+| Method | Accuracy |
+|---|---|
+| finn_2015 | 0.3569 |
+| edge_sel_5pct | 0.3274 |
+| edge_sel_10pct | 0.3392 |
+| edge_sel_20pct | 0.3392 |
+| proposed | 0.7788 |
+
+#### D. Statistical Validation
 Significance testing results:
 | Test | Result | Interpretation |
 |---|---|---|
@@ -155,7 +187,7 @@ Significance testing results:
 | Permutation Test | 0.001996 | P-value < 0.05 indicates significance over random |
 | McNemar Test | 0.000000 | P-value < 0.05 indicates significance over baseline |
 
-#### D. Robustness Analysis
+#### E. Robustness Analysis
 **Noise Robustness (Accuracy vs Sigma):**
 - Evaluation of model performance when Gaussian noise is added to the input time series.
 
@@ -178,7 +210,7 @@ Significance testing results:
 | N=271 | 0.2974 +/- 0.0101 |
 | N=339 | 0.2802 +/- 0.0000 |
 
-#### E. Visualizations
+#### F. Visualizations
 **Reconstruction Similarity Matrix (Proposed):**
 Shows the similarity scores between all pairs of subjects. A strong diagonal indicates high self-similarity (correct identification) and low cross-similarity.
 
@@ -239,7 +271,23 @@ Comparison of different architectural choices:
 | convae_residuals | 0.5192 | 0.6932 | 0.6031 |
 | convae_sdl | 0.7640 | 0.9027 | 0.8232 |
 
-#### C. Statistical Validation
+#### C. State-of-the-Art Comparison
+Comparison with existing methods and baselines:
+
+**Method Descriptions:**
+- **finn_2015:** The standard functional fingerprinting baseline using Pearson correlation of whole-brain functional connectivity matrices (Finn et al., 2015).
+- **edge_sel_Xpct:** A baseline method that selects only the top X% of edges with the highest discriminative power (differential identifiability) before correlation.
+- **proposed:** The proposed method utilizing Latent Reconstruction Error from the ConVAE-SDL architecture.
+
+| Method | Accuracy |
+|---|---|
+| finn_2015 | 0.4174 |
+| edge_sel_5pct | 0.3215 |
+| edge_sel_10pct | 0.3274 |
+| edge_sel_20pct | 0.3569 |
+| proposed | 0.7640 |
+
+#### D. Statistical Validation
 Significance testing results:
 | Test | Result | Interpretation |
 |---|---|---|
@@ -248,7 +296,7 @@ Significance testing results:
 | Permutation Test | 0.001996 | P-value < 0.05 indicates significance over random |
 | McNemar Test | 0.000000 | P-value < 0.05 indicates significance over baseline |
 
-#### D. Robustness Analysis
+#### E. Robustness Analysis
 **Noise Robustness (Accuracy vs Sigma):**
 - Evaluation of model performance when Gaussian noise is added to the input time series.
 
@@ -271,7 +319,7 @@ Significance testing results:
 | N=271 | 0.4007 +/- 0.0120 |
 | N=339 | 0.3835 +/- 0.0000 |
 
-#### E. Visualizations
+#### F. Visualizations
 **Reconstruction Similarity Matrix (Proposed):**
 Shows the similarity scores between all pairs of subjects. A strong diagonal indicates high self-similarity (correct identification) and low cross-similarity.
 
@@ -332,7 +380,23 @@ Comparison of different architectural choices:
 | convae_residuals | 0.2861 | 0.4307 | 0.3609 |
 | convae_sdl | 0.7404 | 0.8702 | 0.8004 |
 
-#### C. Statistical Validation
+#### C. State-of-the-Art Comparison
+Comparison with existing methods and baselines:
+
+**Method Descriptions:**
+- **finn_2015:** The standard functional fingerprinting baseline using Pearson correlation of whole-brain functional connectivity matrices (Finn et al., 2015).
+- **edge_sel_Xpct:** A baseline method that selects only the top X% of edges with the highest discriminative power (differential identifiability) before correlation.
+- **proposed:** The proposed method utilizing Latent Reconstruction Error from the ConVAE-SDL architecture.
+
+| Method | Accuracy |
+|---|---|
+| finn_2015 | 0.2817 |
+| edge_sel_5pct | 0.1681 |
+| edge_sel_10pct | 0.2006 |
+| edge_sel_20pct | 0.2065 |
+| proposed | 0.7404 |
+
+#### D. Statistical Validation
 Significance testing results:
 | Test | Result | Interpretation |
 |---|---|---|
@@ -341,7 +405,7 @@ Significance testing results:
 | Permutation Test | 0.001996 | P-value < 0.05 indicates significance over random |
 | McNemar Test | 0.000000 | P-value < 0.05 indicates significance over baseline |
 
-#### D. Robustness Analysis
+#### E. Robustness Analysis
 **Noise Robustness (Accuracy vs Sigma):**
 - Evaluation of model performance when Gaussian noise is added to the input time series.
 
@@ -364,7 +428,7 @@ Significance testing results:
 | N=271 | 0.2081 +/- 0.0164 |
 | N=339 | 0.1947 +/- 0.0000 |
 
-#### E. Visualizations
+#### F. Visualizations
 **Reconstruction Similarity Matrix (Proposed):**
 Shows the similarity scores between all pairs of subjects. A strong diagonal indicates high self-similarity (correct identification) and low cross-similarity.
 
@@ -425,7 +489,23 @@ Comparison of different architectural choices:
 | convae_residuals | 0.4041 | 0.5664 | 0.4849 |
 | convae_sdl | 0.7139 | 0.8673 | 0.7816 |
 
-#### C. Statistical Validation
+#### C. State-of-the-Art Comparison
+Comparison with existing methods and baselines:
+
+**Method Descriptions:**
+- **finn_2015:** The standard functional fingerprinting baseline using Pearson correlation of whole-brain functional connectivity matrices (Finn et al., 2015).
+- **edge_sel_Xpct:** A baseline method that selects only the top X% of edges with the highest discriminative power (differential identifiability) before correlation.
+- **proposed:** The proposed method utilizing Latent Reconstruction Error from the ConVAE-SDL architecture.
+
+| Method | Accuracy |
+|---|---|
+| finn_2015 | 0.3230 |
+| edge_sel_5pct | 0.2507 |
+| edge_sel_10pct | 0.2920 |
+| edge_sel_20pct | 0.3127 |
+| proposed | 0.7139 |
+
+#### D. Statistical Validation
 Significance testing results:
 | Test | Result | Interpretation |
 |---|---|---|
@@ -434,7 +514,7 @@ Significance testing results:
 | Permutation Test | 0.001996 | P-value < 0.05 indicates significance over random |
 | McNemar Test | 0.000000 | P-value < 0.05 indicates significance over baseline |
 
-#### D. Robustness Analysis
+#### E. Robustness Analysis
 **Noise Robustness (Accuracy vs Sigma):**
 - Evaluation of model performance when Gaussian noise is added to the input time series.
 
@@ -457,7 +537,7 @@ Significance testing results:
 | N=271 | 0.2908 +/- 0.0129 |
 | N=339 | 0.2714 +/- 0.0000 |
 
-#### E. Visualizations
+#### F. Visualizations
 **Reconstruction Similarity Matrix (Proposed):**
 Shows the similarity scores between all pairs of subjects. A strong diagonal indicates high self-similarity (correct identification) and low cross-similarity.
 
@@ -518,7 +598,23 @@ Comparison of different architectural choices:
 | convae_residuals | 0.4100 | 0.5575 | 0.4849 |
 | convae_sdl | 0.8201 | 0.9204 | 0.8658 |
 
-#### C. Statistical Validation
+#### C. State-of-the-Art Comparison
+Comparison with existing methods and baselines:
+
+**Method Descriptions:**
+- **finn_2015:** The standard functional fingerprinting baseline using Pearson correlation of whole-brain functional connectivity matrices (Finn et al., 2015).
+- **edge_sel_Xpct:** A baseline method that selects only the top X% of edges with the highest discriminative power (differential identifiability) before correlation.
+- **proposed:** The proposed method utilizing Latent Reconstruction Error from the ConVAE-SDL architecture.
+
+| Method | Accuracy |
+|---|---|
+| finn_2015 | 0.3510 |
+| edge_sel_5pct | 0.2153 |
+| edge_sel_10pct | 0.2478 |
+| edge_sel_20pct | 0.2891 |
+| proposed | 0.8201 |
+
+#### D. Statistical Validation
 Significance testing results:
 | Test | Result | Interpretation |
 |---|---|---|
@@ -527,7 +623,7 @@ Significance testing results:
 | Permutation Test | 0.001996 | P-value < 0.05 indicates significance over random |
 | McNemar Test | 0.000000 | P-value < 0.05 indicates significance over baseline |
 
-#### D. Robustness Analysis
+#### E. Robustness Analysis
 **Noise Robustness (Accuracy vs Sigma):**
 - Evaluation of model performance when Gaussian noise is added to the input time series.
 
@@ -550,7 +646,7 @@ Significance testing results:
 | N=271 | 0.3218 +/- 0.0075 |
 | N=339 | 0.3186 +/- 0.0000 |
 
-#### E. Visualizations
+#### F. Visualizations
 **Reconstruction Similarity Matrix (Proposed):**
 Shows the similarity scores between all pairs of subjects. A strong diagonal indicates high self-similarity (correct identification) and low cross-similarity.
 
@@ -611,7 +707,23 @@ Comparison of different architectural choices:
 | convae_residuals | 0.2802 | 0.4543 | 0.3680 |
 | convae_sdl | 0.6844 | 0.8466 | 0.7587 |
 
-#### C. Statistical Validation
+#### C. State-of-the-Art Comparison
+Comparison with existing methods and baselines:
+
+**Method Descriptions:**
+- **finn_2015:** The standard functional fingerprinting baseline using Pearson correlation of whole-brain functional connectivity matrices (Finn et al., 2015).
+- **edge_sel_Xpct:** A baseline method that selects only the top X% of edges with the highest discriminative power (differential identifiability) before correlation.
+- **proposed:** The proposed method utilizing Latent Reconstruction Error from the ConVAE-SDL architecture.
+
+| Method | Accuracy |
+|---|---|
+| finn_2015 | 0.2301 |
+| edge_sel_5pct | 0.1593 |
+| edge_sel_10pct | 0.1770 |
+| edge_sel_20pct | 0.2153 |
+| proposed | 0.6844 |
+
+#### D. Statistical Validation
 Significance testing results:
 | Test | Result | Interpretation |
 |---|---|---|
@@ -620,7 +732,7 @@ Significance testing results:
 | Permutation Test | 0.001996 | P-value < 0.05 indicates significance over random |
 | McNemar Test | 0.000000 | P-value < 0.05 indicates significance over baseline |
 
-#### D. Robustness Analysis
+#### E. Robustness Analysis
 **Noise Robustness (Accuracy vs Sigma):**
 - Evaluation of model performance when Gaussian noise is added to the input time series.
 
@@ -643,7 +755,7 @@ Significance testing results:
 | N=271 | 0.2089 +/- 0.0125 |
 | N=339 | 0.1976 +/- 0.0000 |
 
-#### E. Visualizations
+#### F. Visualizations
 **Reconstruction Similarity Matrix (Proposed):**
 Shows the similarity scores between all pairs of subjects. A strong diagonal indicates high self-similarity (correct identification) and low cross-similarity.
 
