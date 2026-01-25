@@ -1,6 +1,6 @@
 # Comprehensive Brain Fingerprinting Analysis Report
 
-**Generated on:** 2026-01-25 11:10:51
+**Generated on:** 2026-01-25 11:14:55
 
 ## 1. Methodology & Metrics Explanation
 
@@ -31,15 +31,13 @@
 ## 3. Detailed Task Analysis
 
 ### 3.1 Task: SOCIAL
-**Source Directory:** `results/hcp_fingerprinting_results_20260124_233031/run_20260124_194652_social`
-
 #### A. Comprehensive Metrics
 | Metric | Value | Description |
 |---|---|---|
 | Top-1 Accuracy | 0.7935 | Strict identification accuracy |
 | Top-3 Accuracy | 0.8643 | Correct match in top 3 |
 | Top-5 Accuracy | 0.8909 | Correct match in top 5 |
-| Top-10 Accuracy | 0.9322 |  |
+| Top-10 Accuracy | 0.9322 | Correct match in top 10 |
 | Mean Rank | 5.64 | Average rank of correct subject |
 | Mean Reciprocal Rank | 0.8381 | Harmonic mean of ranks |
 | Differential Identifiability | 0.1073 | Separation between self/other |
@@ -91,50 +89,48 @@ Significance testing results:
 **Reconstruction Similarity Matrix (Proposed):**
 Shows the similarity scores between all pairs of subjects. A strong diagonal indicates high self-similarity (correct identification) and low cross-similarity.
 
-![heatmap_convae_sdl.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_194652_social/heatmap_convae_sdl.png)
+![heatmap_convae_sdl.png](report_assets/social/heatmap_convae_sdl.png)
 
 **Ablation Study:**
 Bar chart comparing the accuracy of the proposed method against baselines and partial implementations.
 
-![ablation_results.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_194652_social/ablation_results.png)
+![ablation_results.png](report_assets/social/ablation_results.png)
 
 **Robustness Analysis:**
 Curves showing how accuracy changes with increased noise and reduced sample sizes.
 
-![robustness.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_194652_social/robustness.png)
+![robustness.png](report_assets/social/robustness.png)
 
 **Learned Dictionary Atoms:**
 Visualization of the sparse components (atoms) learned by the K-SVD Dictionary Learning module, representing fundamental connectivity motifs.
 
-![dictionary_atoms.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_194652_social/dictionary_atoms.png)
+![dictionary_atoms.png](report_assets/social/dictionary_atoms.png)
 
 **Similarity Distributions:**
 Histograms of intra-subject (self) vs. inter-subject (others) similarity scores. Less overlap indicates better identifiability.
 
-![similarity_dist.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_194652_social/similarity_dist.png)
+![similarity_dist.png](report_assets/social/similarity_dist.png)
 
 **Full Correlation Matrix:**
 Raw Functional Connectivity matrix visualization.
 
-![full_correlation_matrix.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_194652_social/full_correlation_matrix.png)
+![full_correlation_matrix.png](report_assets/social/full_correlation_matrix.png)
 
 **Group Average Heatmap:**
 Similarity matrix using simple group averaging.
 
-![heatmap_group_avg.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_194652_social/heatmap_group_avg.png)
+![heatmap_group_avg.png](report_assets/social/heatmap_group_avg.png)
 
 ---
 
 ### 3.2 Task: MOTOR
-**Source Directory:** `results/hcp_fingerprinting_results_20260124_233031/run_20260124_201617_motor`
-
 #### A. Comprehensive Metrics
 | Metric | Value | Description |
 |---|---|---|
 | Top-1 Accuracy | 0.7788 | Strict identification accuracy |
 | Top-3 Accuracy | 0.8879 | Correct match in top 3 |
 | Top-5 Accuracy | 0.9174 | Correct match in top 5 |
-| Top-10 Accuracy | 0.9410 |  |
+| Top-10 Accuracy | 0.9410 | Correct match in top 10 |
 | Mean Rank | 5.35 | Average rank of correct subject |
 | Mean Reciprocal Rank | 0.8412 | Harmonic mean of ranks |
 | Differential Identifiability | 0.0976 | Separation between self/other |
@@ -186,50 +182,48 @@ Significance testing results:
 **Reconstruction Similarity Matrix (Proposed):**
 Shows the similarity scores between all pairs of subjects. A strong diagonal indicates high self-similarity (correct identification) and low cross-similarity.
 
-![heatmap_convae_sdl.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_201617_motor/heatmap_convae_sdl.png)
+![heatmap_convae_sdl.png](report_assets/motor/heatmap_convae_sdl.png)
 
 **Ablation Study:**
 Bar chart comparing the accuracy of the proposed method against baselines and partial implementations.
 
-![ablation_results.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_201617_motor/ablation_results.png)
+![ablation_results.png](report_assets/motor/ablation_results.png)
 
 **Robustness Analysis:**
 Curves showing how accuracy changes with increased noise and reduced sample sizes.
 
-![robustness.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_201617_motor/robustness.png)
+![robustness.png](report_assets/motor/robustness.png)
 
 **Learned Dictionary Atoms:**
 Visualization of the sparse components (atoms) learned by the K-SVD Dictionary Learning module, representing fundamental connectivity motifs.
 
-![dictionary_atoms.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_201617_motor/dictionary_atoms.png)
+![dictionary_atoms.png](report_assets/motor/dictionary_atoms.png)
 
 **Similarity Distributions:**
 Histograms of intra-subject (self) vs. inter-subject (others) similarity scores. Less overlap indicates better identifiability.
 
-![similarity_dist.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_201617_motor/similarity_dist.png)
+![similarity_dist.png](report_assets/motor/similarity_dist.png)
 
 **Full Correlation Matrix:**
 Raw Functional Connectivity matrix visualization.
 
-![full_correlation_matrix.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_201617_motor/full_correlation_matrix.png)
+![full_correlation_matrix.png](report_assets/motor/full_correlation_matrix.png)
 
 **Group Average Heatmap:**
 Similarity matrix using simple group averaging.
 
-![heatmap_group_avg.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_201617_motor/heatmap_group_avg.png)
+![heatmap_group_avg.png](report_assets/motor/heatmap_group_avg.png)
 
 ---
 
 ### 3.3 Task: WM
-**Source Directory:** `results/hcp_fingerprinting_results_20260124_233031/run_20260124_204931_wm`
-
 #### A. Comprehensive Metrics
 | Metric | Value | Description |
 |---|---|---|
 | Top-1 Accuracy | 0.7640 | Strict identification accuracy |
 | Top-3 Accuracy | 0.8614 | Correct match in top 3 |
 | Top-5 Accuracy | 0.9027 | Correct match in top 5 |
-| Top-10 Accuracy | 0.9263 |  |
+| Top-10 Accuracy | 0.9263 | Correct match in top 10 |
 | Mean Rank | 7.35 | Average rank of correct subject |
 | Mean Reciprocal Rank | 0.8232 | Harmonic mean of ranks |
 | Differential Identifiability | 0.1081 | Separation between self/other |
@@ -281,50 +275,48 @@ Significance testing results:
 **Reconstruction Similarity Matrix (Proposed):**
 Shows the similarity scores between all pairs of subjects. A strong diagonal indicates high self-similarity (correct identification) and low cross-similarity.
 
-![heatmap_convae_sdl.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_204931_wm/heatmap_convae_sdl.png)
+![heatmap_convae_sdl.png](report_assets/wm/heatmap_convae_sdl.png)
 
 **Ablation Study:**
 Bar chart comparing the accuracy of the proposed method against baselines and partial implementations.
 
-![ablation_results.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_204931_wm/ablation_results.png)
+![ablation_results.png](report_assets/wm/ablation_results.png)
 
 **Robustness Analysis:**
 Curves showing how accuracy changes with increased noise and reduced sample sizes.
 
-![robustness.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_204931_wm/robustness.png)
+![robustness.png](report_assets/wm/robustness.png)
 
 **Learned Dictionary Atoms:**
 Visualization of the sparse components (atoms) learned by the K-SVD Dictionary Learning module, representing fundamental connectivity motifs.
 
-![dictionary_atoms.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_204931_wm/dictionary_atoms.png)
+![dictionary_atoms.png](report_assets/wm/dictionary_atoms.png)
 
 **Similarity Distributions:**
 Histograms of intra-subject (self) vs. inter-subject (others) similarity scores. Less overlap indicates better identifiability.
 
-![similarity_dist.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_204931_wm/similarity_dist.png)
+![similarity_dist.png](report_assets/wm/similarity_dist.png)
 
 **Full Correlation Matrix:**
 Raw Functional Connectivity matrix visualization.
 
-![full_correlation_matrix.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_204931_wm/full_correlation_matrix.png)
+![full_correlation_matrix.png](report_assets/wm/full_correlation_matrix.png)
 
 **Group Average Heatmap:**
 Similarity matrix using simple group averaging.
 
-![heatmap_group_avg.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_204931_wm/heatmap_group_avg.png)
+![heatmap_group_avg.png](report_assets/wm/heatmap_group_avg.png)
 
 ---
 
 ### 3.4 Task: EMOTION
-**Source Directory:** `results/hcp_fingerprinting_results_20260124_233031/run_20260124_212416_emotion`
-
 #### A. Comprehensive Metrics
 | Metric | Value | Description |
 |---|---|---|
 | Top-1 Accuracy | 0.7404 | Strict identification accuracy |
 | Top-3 Accuracy | 0.8496 | Correct match in top 3 |
 | Top-5 Accuracy | 0.8702 | Correct match in top 5 |
-| Top-10 Accuracy | 0.9115 |  |
+| Top-10 Accuracy | 0.9115 | Correct match in top 10 |
 | Mean Rank | 4.64 | Average rank of correct subject |
 | Mean Reciprocal Rank | 0.8004 | Harmonic mean of ranks |
 | Differential Identifiability | 0.0861 | Separation between self/other |
@@ -376,50 +368,48 @@ Significance testing results:
 **Reconstruction Similarity Matrix (Proposed):**
 Shows the similarity scores between all pairs of subjects. A strong diagonal indicates high self-similarity (correct identification) and low cross-similarity.
 
-![heatmap_convae_sdl.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_212416_emotion/heatmap_convae_sdl.png)
+![heatmap_convae_sdl.png](report_assets/emotion/heatmap_convae_sdl.png)
 
 **Ablation Study:**
 Bar chart comparing the accuracy of the proposed method against baselines and partial implementations.
 
-![ablation_results.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_212416_emotion/ablation_results.png)
+![ablation_results.png](report_assets/emotion/ablation_results.png)
 
 **Robustness Analysis:**
 Curves showing how accuracy changes with increased noise and reduced sample sizes.
 
-![robustness.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_212416_emotion/robustness.png)
+![robustness.png](report_assets/emotion/robustness.png)
 
 **Learned Dictionary Atoms:**
 Visualization of the sparse components (atoms) learned by the K-SVD Dictionary Learning module, representing fundamental connectivity motifs.
 
-![dictionary_atoms.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_212416_emotion/dictionary_atoms.png)
+![dictionary_atoms.png](report_assets/emotion/dictionary_atoms.png)
 
 **Similarity Distributions:**
 Histograms of intra-subject (self) vs. inter-subject (others) similarity scores. Less overlap indicates better identifiability.
 
-![similarity_dist.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_212416_emotion/similarity_dist.png)
+![similarity_dist.png](report_assets/emotion/similarity_dist.png)
 
 **Full Correlation Matrix:**
 Raw Functional Connectivity matrix visualization.
 
-![full_correlation_matrix.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_212416_emotion/full_correlation_matrix.png)
+![full_correlation_matrix.png](report_assets/emotion/full_correlation_matrix.png)
 
 **Group Average Heatmap:**
 Similarity matrix using simple group averaging.
 
-![heatmap_group_avg.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_212416_emotion/heatmap_group_avg.png)
+![heatmap_group_avg.png](report_assets/emotion/heatmap_group_avg.png)
 
 ---
 
 ### 3.5 Task: GAMBLING
-**Source Directory:** `results/hcp_fingerprinting_results_20260124_233031/run_20260124_215856_gambling`
-
 #### A. Comprehensive Metrics
 | Metric | Value | Description |
 |---|---|---|
 | Top-1 Accuracy | 0.7139 | Strict identification accuracy |
 | Top-3 Accuracy | 0.8201 | Correct match in top 3 |
 | Top-5 Accuracy | 0.8673 | Correct match in top 5 |
-| Top-10 Accuracy | 0.9115 |  |
+| Top-10 Accuracy | 0.9115 | Correct match in top 10 |
 | Mean Rank | 6.33 | Average rank of correct subject |
 | Mean Reciprocal Rank | 0.7816 | Harmonic mean of ranks |
 | Differential Identifiability | 0.0933 | Separation between self/other |
@@ -471,50 +461,48 @@ Significance testing results:
 **Reconstruction Similarity Matrix (Proposed):**
 Shows the similarity scores between all pairs of subjects. A strong diagonal indicates high self-similarity (correct identification) and low cross-similarity.
 
-![heatmap_convae_sdl.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_215856_gambling/heatmap_convae_sdl.png)
+![heatmap_convae_sdl.png](report_assets/gambling/heatmap_convae_sdl.png)
 
 **Ablation Study:**
 Bar chart comparing the accuracy of the proposed method against baselines and partial implementations.
 
-![ablation_results.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_215856_gambling/ablation_results.png)
+![ablation_results.png](report_assets/gambling/ablation_results.png)
 
 **Robustness Analysis:**
 Curves showing how accuracy changes with increased noise and reduced sample sizes.
 
-![robustness.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_215856_gambling/robustness.png)
+![robustness.png](report_assets/gambling/robustness.png)
 
 **Learned Dictionary Atoms:**
 Visualization of the sparse components (atoms) learned by the K-SVD Dictionary Learning module, representing fundamental connectivity motifs.
 
-![dictionary_atoms.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_215856_gambling/dictionary_atoms.png)
+![dictionary_atoms.png](report_assets/gambling/dictionary_atoms.png)
 
 **Similarity Distributions:**
 Histograms of intra-subject (self) vs. inter-subject (others) similarity scores. Less overlap indicates better identifiability.
 
-![similarity_dist.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_215856_gambling/similarity_dist.png)
+![similarity_dist.png](report_assets/gambling/similarity_dist.png)
 
 **Full Correlation Matrix:**
 Raw Functional Connectivity matrix visualization.
 
-![full_correlation_matrix.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_215856_gambling/full_correlation_matrix.png)
+![full_correlation_matrix.png](report_assets/gambling/full_correlation_matrix.png)
 
 **Group Average Heatmap:**
 Similarity matrix using simple group averaging.
 
-![heatmap_group_avg.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_215856_gambling/heatmap_group_avg.png)
+![heatmap_group_avg.png](report_assets/gambling/heatmap_group_avg.png)
 
 ---
 
 ### 3.6 Task: LANGUAGE
-**Source Directory:** `results/hcp_fingerprinting_results_20260124_233031/run_20260124_223037_language`
-
 #### A. Comprehensive Metrics
 | Metric | Value | Description |
 |---|---|---|
 | Top-1 Accuracy | 0.8201 | Strict identification accuracy |
 | Top-3 Accuracy | 0.8968 | Correct match in top 3 |
 | Top-5 Accuracy | 0.9204 | Correct match in top 5 |
-| Top-10 Accuracy | 0.9558 |  |
+| Top-10 Accuracy | 0.9558 | Correct match in top 10 |
 | Mean Rank | 4.35 | Average rank of correct subject |
 | Mean Reciprocal Rank | 0.8658 | Harmonic mean of ranks |
 | Differential Identifiability | 0.0978 | Separation between self/other |
@@ -566,50 +554,48 @@ Significance testing results:
 **Reconstruction Similarity Matrix (Proposed):**
 Shows the similarity scores between all pairs of subjects. A strong diagonal indicates high self-similarity (correct identification) and low cross-similarity.
 
-![heatmap_convae_sdl.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_223037_language/heatmap_convae_sdl.png)
+![heatmap_convae_sdl.png](report_assets/language/heatmap_convae_sdl.png)
 
 **Ablation Study:**
 Bar chart comparing the accuracy of the proposed method against baselines and partial implementations.
 
-![ablation_results.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_223037_language/ablation_results.png)
+![ablation_results.png](report_assets/language/ablation_results.png)
 
 **Robustness Analysis:**
 Curves showing how accuracy changes with increased noise and reduced sample sizes.
 
-![robustness.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_223037_language/robustness.png)
+![robustness.png](report_assets/language/robustness.png)
 
 **Learned Dictionary Atoms:**
 Visualization of the sparse components (atoms) learned by the K-SVD Dictionary Learning module, representing fundamental connectivity motifs.
 
-![dictionary_atoms.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_223037_language/dictionary_atoms.png)
+![dictionary_atoms.png](report_assets/language/dictionary_atoms.png)
 
 **Similarity Distributions:**
 Histograms of intra-subject (self) vs. inter-subject (others) similarity scores. Less overlap indicates better identifiability.
 
-![similarity_dist.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_223037_language/similarity_dist.png)
+![similarity_dist.png](report_assets/language/similarity_dist.png)
 
 **Full Correlation Matrix:**
 Raw Functional Connectivity matrix visualization.
 
-![full_correlation_matrix.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_223037_language/full_correlation_matrix.png)
+![full_correlation_matrix.png](report_assets/language/full_correlation_matrix.png)
 
 **Group Average Heatmap:**
 Similarity matrix using simple group averaging.
 
-![heatmap_group_avg.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_223037_language/heatmap_group_avg.png)
+![heatmap_group_avg.png](report_assets/language/heatmap_group_avg.png)
 
 ---
 
 ### 3.7 Task: RELATIONAL
-**Source Directory:** `results/hcp_fingerprinting_results_20260124_233031/run_20260124_230230_relational`
-
 #### A. Comprehensive Metrics
 | Metric | Value | Description |
 |---|---|---|
 | Top-1 Accuracy | 0.6844 | Strict identification accuracy |
 | Top-3 Accuracy | 0.7906 | Correct match in top 3 |
 | Top-5 Accuracy | 0.8466 | Correct match in top 5 |
-| Top-10 Accuracy | 0.9027 |  |
+| Top-10 Accuracy | 0.9027 | Correct match in top 10 |
 | Mean Rank | 5.83 | Average rank of correct subject |
 | Mean Reciprocal Rank | 0.7587 | Harmonic mean of ranks |
 | Differential Identifiability | 0.0844 | Separation between self/other |
@@ -661,36 +647,36 @@ Significance testing results:
 **Reconstruction Similarity Matrix (Proposed):**
 Shows the similarity scores between all pairs of subjects. A strong diagonal indicates high self-similarity (correct identification) and low cross-similarity.
 
-![heatmap_convae_sdl.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_230230_relational/heatmap_convae_sdl.png)
+![heatmap_convae_sdl.png](report_assets/relational/heatmap_convae_sdl.png)
 
 **Ablation Study:**
 Bar chart comparing the accuracy of the proposed method against baselines and partial implementations.
 
-![ablation_results.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_230230_relational/ablation_results.png)
+![ablation_results.png](report_assets/relational/ablation_results.png)
 
 **Robustness Analysis:**
 Curves showing how accuracy changes with increased noise and reduced sample sizes.
 
-![robustness.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_230230_relational/robustness.png)
+![robustness.png](report_assets/relational/robustness.png)
 
 **Learned Dictionary Atoms:**
 Visualization of the sparse components (atoms) learned by the K-SVD Dictionary Learning module, representing fundamental connectivity motifs.
 
-![dictionary_atoms.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_230230_relational/dictionary_atoms.png)
+![dictionary_atoms.png](report_assets/relational/dictionary_atoms.png)
 
 **Similarity Distributions:**
 Histograms of intra-subject (self) vs. inter-subject (others) similarity scores. Less overlap indicates better identifiability.
 
-![similarity_dist.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_230230_relational/similarity_dist.png)
+![similarity_dist.png](report_assets/relational/similarity_dist.png)
 
 **Full Correlation Matrix:**
 Raw Functional Connectivity matrix visualization.
 
-![full_correlation_matrix.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_230230_relational/full_correlation_matrix.png)
+![full_correlation_matrix.png](report_assets/relational/full_correlation_matrix.png)
 
 **Group Average Heatmap:**
 Similarity matrix using simple group averaging.
 
-![heatmap_group_avg.png](results/hcp_fingerprinting_results_20260124_233031/run_20260124_230230_relational/heatmap_group_avg.png)
+![heatmap_group_avg.png](report_assets/relational/heatmap_group_avg.png)
 
 ---

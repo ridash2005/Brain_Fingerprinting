@@ -117,7 +117,14 @@ def parse_report(file_path):
     
     return data
 
+import shutil
+
 def generate_markdown(all_results, output_file):
+    # Create assets directory
+    assets_dir = "report_assets"
+    if not os.path.exists(assets_dir):
+        os.makedirs(assets_dir)
+        
     with open(output_file, 'w') as f:
         # Title
         f.write("# Comprehensive Brain Fingerprinting Analysis Report\n\n")
@@ -170,10 +177,14 @@ def generate_markdown(all_results, output_file):
         
         for task_name, r in all_results.items():
             data = r['data']
-            rel_path = r['rel_path'] # relative path from report root to result dir
+            # Source path (original results)
+            source_dir = r['full_path']
+            # Destination path for images
+            task_assets_dir = os.path.join(assets_dir, task_name.lower())
+            if not os.path.exists(task_assets_dir):
+                os.makedirs(task_assets_dir)
             
             f.write(f"\n### 3.{list(all_results.keys()).index(task_name)+1} Task: {task_name}\n")
-            f.write(f"**Source Directory:** `{rel_path}`\n\n")
             
             # 3.1 Metrics
             f.write("#### A. Comprehensive Metrics\n")
@@ -183,6 +194,7 @@ def generate_markdown(all_results, output_file):
                 'Top-1 Accuracy': "Strict identification accuracy",
                 'Top-3 Accuracy': "Correct match in top 3",
                 'Top-5 Accuracy': "Correct match in top 5",
+                'Top-10 Accuracy': "Correct match in top 10",
                 'Mean Rank': "Average rank of correct subject",
                 'Mean Reciprocal Rank': "Harmonic mean of ranks",
                 'Differential Identifiability': "Separation between self/other"
@@ -229,7 +241,6 @@ def generate_markdown(all_results, output_file):
             # 3.5 Images
             f.write("\n#### E. Visualizations\n")
             
-            # Define images to look for and their descriptions
             image_map = {
                 'heatmap_convae_sdl.png': "**Reconstruction Similarity Matrix (Proposed):**\nShows the similarity scores between all pairs of subjects. A strong diagonal indicates high self-similarity (correct identification) and low cross-similarity.",
                 'ablation_results.png': "**Ablation Study:**\nBar chart comparing the accuracy of the proposed method against baselines and partial implementations.",
@@ -241,12 +252,18 @@ def generate_markdown(all_results, output_file):
             }
             
             for img_name, description in image_map.items():
-                img_path = f"{rel_path}/{img_name}"
-                # Check if image actually exists is hard without full walk, assuming yes if folder exists
-                # In markdown, using relative path
-                f.write(f"{description}\n\n")
-                f.write(f"![{img_name}]({img_path})\n\n")
-                
+                src_img_path = os.path.join(source_dir, img_name)
+                if os.path.exists(src_img_path):
+                    # Copy to report_assets
+                    dst_img_path = os.path.join(task_assets_dir, img_name)
+                    shutil.copy2(src_img_path, dst_img_path)
+                    
+                    # Use relative path for markdown (always forward slashes)
+                    rel_img_path = f"report_assets/{task_name.lower()}/{img_name}"
+                    
+                    f.write(f"{description}\n\n")
+                    f.write(f"![{img_name}]({rel_img_path})\n\n")
+            
             f.write("---\n")
 
 def main():
