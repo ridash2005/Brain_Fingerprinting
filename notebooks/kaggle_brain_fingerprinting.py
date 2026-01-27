@@ -1221,7 +1221,7 @@ def run_complete_analysis(n_subjects=100, task="motor", use_synthetic=True, n_fo
         plot_similarity_distributions(fc_refined, os.path.join(run_dir, "similarity_dist.png"))
         
         # Full Correlation Matrix
-        plot_full_correlation_matrix(fc_refined, os.path.join(run_dir, "full_correlation_matrix.png"))
+        plot_full_correlation_matrix(ablation['raw_fc']['corr_matrix'], os.path.join(run_dir, "full_correlation_matrix.png"))
     
     # ===== PHASE 6: CROSS-VALIDATION =====
     print("\n[6/9] Running cross-validation...")
