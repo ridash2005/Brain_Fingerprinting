@@ -1,19 +1,38 @@
 # Comprehensive Brain Fingerprinting Analysis Report
 
-**Generated on:** 2026-01-25 12:02:08
+**Generated on:** 2026-01-25 12:02:08 (Updated post-review)
 
 ## 1. Methodology & Metrics Explanation
 
-### Evaluation Metrics
-- **Identification Accuracy (Top-1):** The percentage of subjects correctly identified from the database (Rank-1).
+### A. Evaluation Metrics
+- **Identification Accuracy (Top-1):** The percentage of subjects in verify session correctly identified from the database (Rank-1).
 - **Top-5 Accuracy:** The percentage of times the correct subject is present within the top 5 predicted matches.
 - **Mean Reciprocal Rank (MRR):** A statistic measure for evaluating the return of a ranked list of answers. MRR is 1 if the first result is correct, 0.5 if second, etc.
-- **Differential Identifiability:** The gap between the mean intra-subject similarity and mean inter-subject similarity. Higher is better.
+- **Differential Identifiability:** The gap between the mean intra-subject similarity ($I_{self}$) and mean inter-subject similarity ($I_{others}$). Higher is better, indicating stronger separation between subjects.
 
-### Statistical Tests
-- **Permutation Test:** Evaluates if the performance is significantly better than random chance by shuffling labels (1000 iterations).
-- **McNemar Test:** A paired non-parametric test used to compare the performance of two classifiers (Proposed vs. Baseline) on the same subjects. It specifically analyzes the cases where the models disagree. A **p-value < 0.05** indicates that the difference in accuracy is statistically significant and not due to random chance.
-- **Bootstrap Confidence Intervals:** 95% CI calculated using 1000 bootstrap samples to estimate uncertainty.
+### B. Statistical Validation Methods
+- **Permutation Test (for Unsupervised Significance):**  
+  Since the identification is unsupervised, we validate that the high accuracy is not due to random chance. We randomly shuffle the subject labels of the target session 1000 times and re-calculate the identification accuracy. This builds a null distribution of "chance" accuracies. A p-value < 0.05 indicates our result is statistically significant and not a random artifact.
+  
+- **McNemar Test:**  
+  A paired non-parametric statistical hypothesis test used to compare the performance of two machine learning models (Proposed vs. Baseline) on the same set of subjects. It specifically analyzes the contingency table of correct/incorrect predictions. It focuses on subjects where the two models *disagree* (i.e., one is correct and the other is wrong). A **p-value < 0.05** confirms that the improvement in accuracy is statistically robust and not due to variance in the test set.
+
+- **Bootstrap Confidence Intervals:**  
+  We estimate the variability of our accuracy metric by resampling the test set (subjects) with replacement 1000 times. We report the 95% Confidence Interval (CI), providing a range of likely values for the true population accuracy.
+
+### C. Baselines & Models
+- **raw_fc / finn_2015:** The standard functional fingerprinting baseline using Pearson correlation of whole-brain functional connectivity matrices (Finn et al., 2015).
+- **edge_sel_Xpct:** A strong baseline that effectively performs feature selection by keeping only the top X% of edges with the highest discriminative power (differential identifiability) across the population.
+- **group_avg:** A simple baseline comparing subjects to the group mean (expected to be low).
+- **convae_residuals:** Identification using the reconstruction error of the Autoencoder alone (without SDL). This tests if the AE's residuals are meaningful.
+- **sdl_only:** Identification using Dictionary Learning on raw data (without the Autoencoder). This tests if the AE is necessary.
+- **Proposed (convae_sdl):** The full proposed architecture utilizing Latent Reconstruction Error from the ConVAE-SDL pipeline.
+
+### D. Robustness Metrics
+- **Noise Robustness:** Evaluates model performance when increasing levels of Gaussian noise (feature-independent) are added to the input time series ($ \sigma \in [0, 0.3] $).
+- **Sample Size Robustness:** Evaluates how the identification rate scales as the number of subjects ($N$) in the database increases. Harder tasks typically show degrading performance as $N$ grows.
+
+---
 
 ## 2. Aggregate Performance Summary
 
@@ -28,22 +47,23 @@
 | RELATIONAL | 0.6844 | 0.2301 | +197.44% | 0.7587 | 0.0844 |
 | **AVERAGE** | **0.7564** | **0.3281** | **+136.02%** | **0.8156** | **0.0964** |
 
+---
+
 ## 3. Detailed Task Analysis
 
 ### 3.1 Task: SOCIAL
 #### A. Comprehensive Metrics
-| Metric | Value | Description |
-|---|---|---|
-| Top-1 Accuracy | 0.7935 | Strict identification accuracy |
-| Top-3 Accuracy | 0.8643 | Correct match in top 3 |
-| Top-5 Accuracy | 0.8909 | Correct match in top 5 |
-| Top-10 Accuracy | 0.9322 | Correct match in top 10 |
-| Mean Rank | 5.64 | Average rank of correct subject |
-| Mean Reciprocal Rank | 0.8381 | Harmonic mean of ranks |
-| Differential Identifiability | 0.1073 | Separation between self/other |
+| Metric | Value |
+|---|---|
+| Top-1 Accuracy | 0.7935 |
+| Top-3 Accuracy | 0.8643 |
+| Top-5 Accuracy | 0.8909 |
+| Top-10 Accuracy | 0.9322 |
+| Mean Rank | 5.64 |
+| Mean Reciprocal Rank | 0.8381 |
+| Differential Identifiability | 0.1073 |
 
 #### B. Ablation Study (Component Analysis)
-Comparison of different architectural choices:
 | Method | Accuracy | Top-5 | MRR |
 |---|---|---|---|
 | raw_fc | 0.2802 | 0.4307 | 0.3540 |
@@ -54,13 +74,6 @@ Comparison of different architectural choices:
 | convae_sdl | 0.7935 | 0.8909 | 0.8381 |
 
 #### C. State-of-the-Art Comparison
-Comparison with existing methods and baselines:
-
-**Method Descriptions:**
-- **finn_2015:** The standard functional fingerprinting baseline using Pearson correlation of whole-brain functional connectivity matrices (Finn et al., 2015).
-- **edge_sel_Xpct:** A baseline method that selects only the top X% of edges with the highest discriminative power (differential identifiability) before correlation.
-- **proposed:** The proposed method utilizing Latent Reconstruction Error from the ConVAE-SDL architecture.
-
 | Method | Accuracy |
 |---|---|
 | finn_2015 | 0.3363 |
@@ -70,18 +83,15 @@ Comparison with existing methods and baselines:
 | proposed | 0.7935 |
 
 #### D. Statistical Validation
-Significance testing results:
 | Test | Result | Interpretation |
 |---|---|---|
 | Bootstrap Mean | 0.1946 +/- 0.0143 | Stability of the mean |
 | 95% CI | [0.1681, 0.2242] | Reliability range |
-| Permutation Test | 0.001996 | P-value < 0.05 indicates significance over random |
-| McNemar Test | 0.000000 | P-value < 0.05 indicates significance over baseline |
+| Permutation Test | 0.001996 | **Significant** (p < 0.05) |
+| McNemar Test | 0.000000 | **Significant** (p < 0.05) |
 
 #### E. Robustness Analysis
 **Noise Robustness (Accuracy vs Sigma):**
-- Evaluation of model performance when Gaussian noise is added to the input time series.
-
 | Noise Level (Sigma) | Accuracy |
 |---|---|
 | sigma=0 | 0.2802 +/- 0.0000 |
@@ -91,8 +101,6 @@ Significance testing results:
 | sigma=0.3 | 0.2785 +/- 0.0055 |
 
 **Sample Size Robustness (Accuracy vs N):**
-- Evaluation of model performance with varying number of subjects in the database.
-
 | Sample Size (N) | Accuracy |
 |---|---|
 | N=67 | 0.3970 +/- 0.0407 |
@@ -102,57 +110,28 @@ Significance testing results:
 | N=339 | 0.2802 +/- 0.0000 |
 
 #### F. Visualizations
-**Reconstruction Similarity Matrix (Proposed):**
-Shows the similarity scores between all pairs of subjects. A strong diagonal indicates high self-similarity (correct identification) and low cross-similarity.
-
-![heatmap_convae_sdl.png](report_assets/social/heatmap_convae_sdl.png)
-
-**Ablation Study:**
-Bar chart comparing the accuracy of the proposed method against baselines and partial implementations.
-
-![ablation_results.png](report_assets/social/ablation_results.png)
-
-**Robustness Analysis:**
-Curves showing how accuracy changes with increased noise and reduced sample sizes.
-
-![robustness.png](report_assets/social/robustness.png)
-
-**Learned Dictionary Atoms:**
-Visualization of the sparse components (atoms) learned by the K-SVD Dictionary Learning module, representing fundamental connectivity motifs.
-
-![dictionary_atoms.png](report_assets/social/dictionary_atoms.png)
-
-**Similarity Distributions:**
-Histograms of intra-subject (self) vs. inter-subject (others) similarity scores. Less overlap indicates better identifiability.
-
-![similarity_dist.png](report_assets/social/similarity_dist.png)
-
-**Full Correlation Matrix:**
-Raw Functional Connectivity matrix visualization.
-
-![full_correlation_matrix.png](report_assets/social/full_correlation_matrix.png)
-
-**Group Average Heatmap:**
-Similarity matrix using simple group averaging.
-
-![heatmap_group_avg.png](report_assets/social/heatmap_group_avg.png)
+- **Reconstruction Similarity Matrix:** ![heatmap](report_assets/social/heatmap_convae_sdl.png)
+- **Ablation Study:** ![ablation](report_assets/social/ablation_results.png)
+- **Robustness Analysis:** ![robustness](report_assets/social/robustness.png)
+- **Learned Dictionary Atoms:** ![atoms](report_assets/social/dictionary_atoms.png)
+- **Similarity Distributions:** ![sim_dist](report_assets/social/similarity_dist.png)
+- **Full Correlation Matrix:** ![raw_matrix](report_assets/social/full_correlation_matrix.png)
 
 ---
 
 ### 3.2 Task: MOTOR
 #### A. Comprehensive Metrics
-| Metric | Value | Description |
-|---|---|---|
-| Top-1 Accuracy | 0.7788 | Strict identification accuracy |
-| Top-3 Accuracy | 0.8879 | Correct match in top 3 |
-| Top-5 Accuracy | 0.9174 | Correct match in top 5 |
-| Top-10 Accuracy | 0.9410 | Correct match in top 10 |
-| Mean Rank | 5.35 | Average rank of correct subject |
-| Mean Reciprocal Rank | 0.8412 | Harmonic mean of ranks |
-| Differential Identifiability | 0.0976 | Separation between self/other |
+| Metric | Value |
+|---|---|
+| Top-1 Accuracy | 0.7788 |
+| Top-3 Accuracy | 0.8879 |
+| Top-5 Accuracy | 0.9174 |
+| Top-10 Accuracy | 0.9410 |
+| Mean Rank | 5.35 |
+| Mean Reciprocal Rank | 0.8412 |
+| Differential Identifiability | 0.0976 |
 
-#### B. Ablation Study (Component Analysis)
-Comparison of different architectural choices:
+#### B. Ablation Study
 | Method | Accuracy | Top-5 | MRR |
 |---|---|---|---|
 | raw_fc | 0.2802 | 0.4484 | 0.3603 |
@@ -163,13 +142,6 @@ Comparison of different architectural choices:
 | convae_sdl | 0.7788 | 0.9174 | 0.8412 |
 
 #### C. State-of-the-Art Comparison
-Comparison with existing methods and baselines:
-
-**Method Descriptions:**
-- **finn_2015:** The standard functional fingerprinting baseline using Pearson correlation of whole-brain functional connectivity matrices (Finn et al., 2015).
-- **edge_sel_Xpct:** A baseline method that selects only the top X% of edges with the highest discriminative power (differential identifiability) before correlation.
-- **proposed:** The proposed method utilizing Latent Reconstruction Error from the ConVAE-SDL architecture.
-
 | Method | Accuracy |
 |---|---|
 | finn_2015 | 0.3569 |
@@ -179,18 +151,15 @@ Comparison with existing methods and baselines:
 | proposed | 0.7788 |
 
 #### D. Statistical Validation
-Significance testing results:
 | Test | Result | Interpretation |
 |---|---|---|
 | Bootstrap Mean | 0.1967 +/- 0.0161 | Stability of the mean |
 | 95% CI | [0.1681, 0.2301] | Reliability range |
-| Permutation Test | 0.001996 | P-value < 0.05 indicates significance over random |
-| McNemar Test | 0.000000 | P-value < 0.05 indicates significance over baseline |
+| Permutation Test | 0.001996 | **Significant** (p < 0.05) |
+| McNemar Test | 0.000000 | **Significant** (p < 0.05) |
 
 #### E. Robustness Analysis
-**Noise Robustness (Accuracy vs Sigma):**
-- Evaluation of model performance when Gaussian noise is added to the input time series.
-
+**Noise Robustness:**
 | Noise Level (Sigma) | Accuracy |
 |---|---|
 | sigma=0 | 0.2802 +/- 0.0000 |
@@ -199,9 +168,7 @@ Significance testing results:
 | sigma=0.2 | 0.2832 +/- 0.0032 |
 | sigma=0.3 | 0.2832 +/- 0.0046 |
 
-**Sample Size Robustness (Accuracy vs N):**
-- Evaluation of model performance with varying number of subjects in the database.
-
+**Sample Size Robustness:**
 | Sample Size (N) | Accuracy |
 |---|---|
 | N=67 | 0.3791 +/- 0.0439 |
@@ -211,57 +178,27 @@ Significance testing results:
 | N=339 | 0.2802 +/- 0.0000 |
 
 #### F. Visualizations
-**Reconstruction Similarity Matrix (Proposed):**
-Shows the similarity scores between all pairs of subjects. A strong diagonal indicates high self-similarity (correct identification) and low cross-similarity.
-
-![heatmap_convae_sdl.png](report_assets/motor/heatmap_convae_sdl.png)
-
-**Ablation Study:**
-Bar chart comparing the accuracy of the proposed method against baselines and partial implementations.
-
-![ablation_results.png](report_assets/motor/ablation_results.png)
-
-**Robustness Analysis:**
-Curves showing how accuracy changes with increased noise and reduced sample sizes.
-
-![robustness.png](report_assets/motor/robustness.png)
-
-**Learned Dictionary Atoms:**
-Visualization of the sparse components (atoms) learned by the K-SVD Dictionary Learning module, representing fundamental connectivity motifs.
-
-![dictionary_atoms.png](report_assets/motor/dictionary_atoms.png)
-
-**Similarity Distributions:**
-Histograms of intra-subject (self) vs. inter-subject (others) similarity scores. Less overlap indicates better identifiability.
-
-![similarity_dist.png](report_assets/motor/similarity_dist.png)
-
-**Full Correlation Matrix:**
-Raw Functional Connectivity matrix visualization.
-
-![full_correlation_matrix.png](report_assets/motor/full_correlation_matrix.png)
-
-**Group Average Heatmap:**
-Similarity matrix using simple group averaging.
-
-![heatmap_group_avg.png](report_assets/motor/heatmap_group_avg.png)
+- **Reconstruction Similarity Matrix:** ![heatmap](report_assets/motor/heatmap_convae_sdl.png)
+- **Ablation Study:** ![ablation](report_assets/motor/ablation_results.png)
+- **Robustness Analysis:** ![robustness](report_assets/motor/robustness.png)
+- **Learned Dictionary Atoms:** ![atoms](report_assets/motor/dictionary_atoms.png)
+- **Similarity Distributions:** ![sim_dist](report_assets/motor/similarity_dist.png)
 
 ---
 
 ### 3.3 Task: WM
 #### A. Comprehensive Metrics
-| Metric | Value | Description |
-|---|---|---|
-| Top-1 Accuracy | 0.7640 | Strict identification accuracy |
-| Top-3 Accuracy | 0.8614 | Correct match in top 3 |
-| Top-5 Accuracy | 0.9027 | Correct match in top 5 |
-| Top-10 Accuracy | 0.9263 | Correct match in top 10 |
-| Mean Rank | 7.35 | Average rank of correct subject |
-| Mean Reciprocal Rank | 0.8232 | Harmonic mean of ranks |
-| Differential Identifiability | 0.1081 | Separation between self/other |
+| Metric | Value |
+|---|---|
+| Top-1 Accuracy | 0.7640 |
+| Top-3 Accuracy | 0.8614 |
+| Top-5 Accuracy | 0.9027 |
+| Top-10 Accuracy | 0.9263 |
+| Mean Rank | 7.35 |
+| Mean Reciprocal Rank | 0.8232 |
+| Differential Identifiability | 0.1081 |
 
-#### B. Ablation Study (Component Analysis)
-Comparison of different architectural choices:
+#### B. Ablation Study
 | Method | Accuracy | Top-5 | MRR |
 |---|---|---|---|
 | raw_fc | 0.3835 | 0.5339 | 0.4556 |
@@ -272,13 +209,6 @@ Comparison of different architectural choices:
 | convae_sdl | 0.7640 | 0.9027 | 0.8232 |
 
 #### C. State-of-the-Art Comparison
-Comparison with existing methods and baselines:
-
-**Method Descriptions:**
-- **finn_2015:** The standard functional fingerprinting baseline using Pearson correlation of whole-brain functional connectivity matrices (Finn et al., 2015).
-- **edge_sel_Xpct:** A baseline method that selects only the top X% of edges with the highest discriminative power (differential identifiability) before correlation.
-- **proposed:** The proposed method utilizing Latent Reconstruction Error from the ConVAE-SDL architecture.
-
 | Method | Accuracy |
 |---|---|
 | finn_2015 | 0.4174 |
@@ -288,18 +218,15 @@ Comparison with existing methods and baselines:
 | proposed | 0.7640 |
 
 #### D. Statistical Validation
-Significance testing results:
 | Test | Result | Interpretation |
 |---|---|---|
 | Bootstrap Mean | 0.2591 +/- 0.0148 | Stability of the mean |
 | 95% CI | [0.2301, 0.2891] | Reliability range |
-| Permutation Test | 0.001996 | P-value < 0.05 indicates significance over random |
-| McNemar Test | 0.000000 | P-value < 0.05 indicates significance over baseline |
+| Permutation Test | 0.001996 | **Significant** (p < 0.05) |
+| McNemar Test | 0.000000 | **Significant** (p < 0.05) |
 
 #### E. Robustness Analysis
-**Noise Robustness (Accuracy vs Sigma):**
-- Evaluation of model performance when Gaussian noise is added to the input time series.
-
+**Noise Robustness:**
 | Noise Level (Sigma) | Accuracy |
 |---|---|
 | sigma=0 | 0.3835 +/- 0.0000 |
@@ -308,9 +235,7 @@ Significance testing results:
 | sigma=0.2 | 0.3858 +/- 0.0043 |
 | sigma=0.3 | 0.3864 +/- 0.0065 |
 
-**Sample Size Robustness (Accuracy vs N):**
-- Evaluation of model performance with varying number of subjects in the database.
-
+**Sample Size Robustness:**
 | Sample Size (N) | Accuracy |
 |---|---|
 | N=67 | 0.5164 +/- 0.0601 |
@@ -320,57 +245,27 @@ Significance testing results:
 | N=339 | 0.3835 +/- 0.0000 |
 
 #### F. Visualizations
-**Reconstruction Similarity Matrix (Proposed):**
-Shows the similarity scores between all pairs of subjects. A strong diagonal indicates high self-similarity (correct identification) and low cross-similarity.
-
-![heatmap_convae_sdl.png](report_assets/wm/heatmap_convae_sdl.png)
-
-**Ablation Study:**
-Bar chart comparing the accuracy of the proposed method against baselines and partial implementations.
-
-![ablation_results.png](report_assets/wm/ablation_results.png)
-
-**Robustness Analysis:**
-Curves showing how accuracy changes with increased noise and reduced sample sizes.
-
-![robustness.png](report_assets/wm/robustness.png)
-
-**Learned Dictionary Atoms:**
-Visualization of the sparse components (atoms) learned by the K-SVD Dictionary Learning module, representing fundamental connectivity motifs.
-
-![dictionary_atoms.png](report_assets/wm/dictionary_atoms.png)
-
-**Similarity Distributions:**
-Histograms of intra-subject (self) vs. inter-subject (others) similarity scores. Less overlap indicates better identifiability.
-
-![similarity_dist.png](report_assets/wm/similarity_dist.png)
-
-**Full Correlation Matrix:**
-Raw Functional Connectivity matrix visualization.
-
-![full_correlation_matrix.png](report_assets/wm/full_correlation_matrix.png)
-
-**Group Average Heatmap:**
-Similarity matrix using simple group averaging.
-
-![heatmap_group_avg.png](report_assets/wm/heatmap_group_avg.png)
+- **Reconstruction Similarity Matrix:** ![heatmap](report_assets/wm/heatmap_convae_sdl.png)
+- **Ablation Study:** ![ablation](report_assets/wm/ablation_results.png)
+- **Robustness Analysis:** ![robustness](report_assets/wm/robustness.png)
+- **Learned Dictionary Atoms:** ![atoms](report_assets/wm/dictionary_atoms.png)
+- **Similarity Distributions:** ![sim_dist](report_assets/wm/similarity_dist.png)
 
 ---
 
 ### 3.4 Task: EMOTION
 #### A. Comprehensive Metrics
-| Metric | Value | Description |
-|---|---|---|
-| Top-1 Accuracy | 0.7404 | Strict identification accuracy |
-| Top-3 Accuracy | 0.8496 | Correct match in top 3 |
-| Top-5 Accuracy | 0.8702 | Correct match in top 5 |
-| Top-10 Accuracy | 0.9115 | Correct match in top 10 |
-| Mean Rank | 4.64 | Average rank of correct subject |
-| Mean Reciprocal Rank | 0.8004 | Harmonic mean of ranks |
-| Differential Identifiability | 0.0861 | Separation between self/other |
+| Metric | Value |
+|---|---|
+| Top-1 Accuracy | 0.7404 |
+| Top-3 Accuracy | 0.8496 |
+| Top-5 Accuracy | 0.8702 |
+| Top-10 Accuracy | 0.9115 |
+| Mean Rank | 4.64 |
+| Mean Reciprocal Rank | 0.8004 |
+| Differential Identifiability | 0.0861 |
 
-#### B. Ablation Study (Component Analysis)
-Comparison of different architectural choices:
+#### B. Ablation Study
 | Method | Accuracy | Top-5 | MRR |
 |---|---|---|---|
 | raw_fc | 0.1947 | 0.3274 | 0.2670 |
@@ -381,13 +276,6 @@ Comparison of different architectural choices:
 | convae_sdl | 0.7404 | 0.8702 | 0.8004 |
 
 #### C. State-of-the-Art Comparison
-Comparison with existing methods and baselines:
-
-**Method Descriptions:**
-- **finn_2015:** The standard functional fingerprinting baseline using Pearson correlation of whole-brain functional connectivity matrices (Finn et al., 2015).
-- **edge_sel_Xpct:** A baseline method that selects only the top X% of edges with the highest discriminative power (differential identifiability) before correlation.
-- **proposed:** The proposed method utilizing Latent Reconstruction Error from the ConVAE-SDL architecture.
-
 | Method | Accuracy |
 |---|---|
 | finn_2015 | 0.2817 |
@@ -397,18 +285,15 @@ Comparison with existing methods and baselines:
 | proposed | 0.7404 |
 
 #### D. Statistical Validation
-Significance testing results:
 | Test | Result | Interpretation |
 |---|---|---|
 | Bootstrap Mean | 0.1385 +/- 0.0157 | Stability of the mean |
 | 95% CI | [0.1105, 0.1770] | Reliability range |
-| Permutation Test | 0.001996 | P-value < 0.05 indicates significance over random |
-| McNemar Test | 0.000000 | P-value < 0.05 indicates significance over baseline |
+| Permutation Test | 0.001996 | **Significant** (p < 0.05) |
+| McNemar Test | 0.000000 | **Significant** (p < 0.05) |
 
 #### E. Robustness Analysis
-**Noise Robustness (Accuracy vs Sigma):**
-- Evaluation of model performance when Gaussian noise is added to the input time series.
-
+**Noise Robustness:**
 | Noise Level (Sigma) | Accuracy |
 |---|---|
 | sigma=0 | 0.1947 +/- 0.0000 |
@@ -417,9 +302,7 @@ Significance testing results:
 | sigma=0.2 | 0.1923 +/- 0.0047 |
 | sigma=0.3 | 0.1941 +/- 0.0078 |
 
-**Sample Size Robustness (Accuracy vs N):**
-- Evaluation of model performance with varying number of subjects in the database.
-
+**Sample Size Robustness:**
 | Sample Size (N) | Accuracy |
 |---|---|
 | N=67 | 0.2597 +/- 0.0601 |
@@ -429,57 +312,27 @@ Significance testing results:
 | N=339 | 0.1947 +/- 0.0000 |
 
 #### F. Visualizations
-**Reconstruction Similarity Matrix (Proposed):**
-Shows the similarity scores between all pairs of subjects. A strong diagonal indicates high self-similarity (correct identification) and low cross-similarity.
-
-![heatmap_convae_sdl.png](report_assets/emotion/heatmap_convae_sdl.png)
-
-**Ablation Study:**
-Bar chart comparing the accuracy of the proposed method against baselines and partial implementations.
-
-![ablation_results.png](report_assets/emotion/ablation_results.png)
-
-**Robustness Analysis:**
-Curves showing how accuracy changes with increased noise and reduced sample sizes.
-
-![robustness.png](report_assets/emotion/robustness.png)
-
-**Learned Dictionary Atoms:**
-Visualization of the sparse components (atoms) learned by the K-SVD Dictionary Learning module, representing fundamental connectivity motifs.
-
-![dictionary_atoms.png](report_assets/emotion/dictionary_atoms.png)
-
-**Similarity Distributions:**
-Histograms of intra-subject (self) vs. inter-subject (others) similarity scores. Less overlap indicates better identifiability.
-
-![similarity_dist.png](report_assets/emotion/similarity_dist.png)
-
-**Full Correlation Matrix:**
-Raw Functional Connectivity matrix visualization.
-
-![full_correlation_matrix.png](report_assets/emotion/full_correlation_matrix.png)
-
-**Group Average Heatmap:**
-Similarity matrix using simple group averaging.
-
-![heatmap_group_avg.png](report_assets/emotion/heatmap_group_avg.png)
+- **Reconstruction Similarity Matrix:** ![heatmap](report_assets/emotion/heatmap_convae_sdl.png)
+- **Ablation Study:** ![ablation](report_assets/emotion/ablation_results.png)
+- **Robustness:** ![robustness](report_assets/emotion/robustness.png)
+- **Atoms:** ![atoms](report_assets/emotion/dictionary_atoms.png)
+- **Sim Dist:** ![sim_dist](report_assets/emotion/similarity_dist.png)
 
 ---
 
 ### 3.5 Task: GAMBLING
 #### A. Comprehensive Metrics
-| Metric | Value | Description |
-|---|---|---|
-| Top-1 Accuracy | 0.7139 | Strict identification accuracy |
-| Top-3 Accuracy | 0.8201 | Correct match in top 3 |
-| Top-5 Accuracy | 0.8673 | Correct match in top 5 |
-| Top-10 Accuracy | 0.9115 | Correct match in top 10 |
-| Mean Rank | 6.33 | Average rank of correct subject |
-| Mean Reciprocal Rank | 0.7816 | Harmonic mean of ranks |
-| Differential Identifiability | 0.0933 | Separation between self/other |
+| Metric | Value |
+|---|---|
+| Top-1 Accuracy | 0.7139 |
+| Top-3 Accuracy | 0.8201 |
+| Top-5 Accuracy | 0.8673 |
+| Top-10 Accuracy | 0.9115 |
+| Mean Rank | 6.33 |
+| Mean Reciprocal Rank | 0.7816 |
+| Differential Identifiability | 0.0933 |
 
-#### B. Ablation Study (Component Analysis)
-Comparison of different architectural choices:
+#### B. Ablation Study
 | Method | Accuracy | Top-5 | MRR |
 |---|---|---|---|
 | raw_fc | 0.2714 | 0.4130 | 0.3437 |
@@ -490,13 +343,6 @@ Comparison of different architectural choices:
 | convae_sdl | 0.7139 | 0.8673 | 0.7816 |
 
 #### C. State-of-the-Art Comparison
-Comparison with existing methods and baselines:
-
-**Method Descriptions:**
-- **finn_2015:** The standard functional fingerprinting baseline using Pearson correlation of whole-brain functional connectivity matrices (Finn et al., 2015).
-- **edge_sel_Xpct:** A baseline method that selects only the top X% of edges with the highest discriminative power (differential identifiability) before correlation.
-- **proposed:** The proposed method utilizing Latent Reconstruction Error from the ConVAE-SDL architecture.
-
 | Method | Accuracy |
 |---|---|
 | finn_2015 | 0.3230 |
@@ -506,18 +352,15 @@ Comparison with existing methods and baselines:
 | proposed | 0.7139 |
 
 #### D. Statistical Validation
-Significance testing results:
 | Test | Result | Interpretation |
 |---|---|---|
 | Bootstrap Mean | 0.1879 +/- 0.0131 | Stability of the mean |
 | 95% CI | [0.1622, 0.2139] | Reliability range |
-| Permutation Test | 0.001996 | P-value < 0.05 indicates significance over random |
-| McNemar Test | 0.000000 | P-value < 0.05 indicates significance over baseline |
+| Permutation Test | 0.001996 | **Significant** (p < 0.05) |
+| McNemar Test | 0.000000 | **Significant** (p < 0.05) |
 
 #### E. Robustness Analysis
-**Noise Robustness (Accuracy vs Sigma):**
-- Evaluation of model performance when Gaussian noise is added to the input time series.
-
+**Noise Robustness:**
 | Noise Level (Sigma) | Accuracy |
 |---|---|
 | sigma=0 | 0.2714 +/- 0.0000 |
@@ -526,9 +369,7 @@ Significance testing results:
 | sigma=0.2 | 0.2737 +/- 0.0066 |
 | sigma=0.3 | 0.2755 +/- 0.0030 |
 
-**Sample Size Robustness (Accuracy vs N):**
-- Evaluation of model performance with varying number of subjects in the database.
-
+**Sample Size Robustness:**
 | Sample Size (N) | Accuracy |
 |---|---|
 | N=67 | 0.4030 +/- 0.0597 |
@@ -538,57 +379,27 @@ Significance testing results:
 | N=339 | 0.2714 +/- 0.0000 |
 
 #### F. Visualizations
-**Reconstruction Similarity Matrix (Proposed):**
-Shows the similarity scores between all pairs of subjects. A strong diagonal indicates high self-similarity (correct identification) and low cross-similarity.
-
-![heatmap_convae_sdl.png](report_assets/gambling/heatmap_convae_sdl.png)
-
-**Ablation Study:**
-Bar chart comparing the accuracy of the proposed method against baselines and partial implementations.
-
-![ablation_results.png](report_assets/gambling/ablation_results.png)
-
-**Robustness Analysis:**
-Curves showing how accuracy changes with increased noise and reduced sample sizes.
-
-![robustness.png](report_assets/gambling/robustness.png)
-
-**Learned Dictionary Atoms:**
-Visualization of the sparse components (atoms) learned by the K-SVD Dictionary Learning module, representing fundamental connectivity motifs.
-
-![dictionary_atoms.png](report_assets/gambling/dictionary_atoms.png)
-
-**Similarity Distributions:**
-Histograms of intra-subject (self) vs. inter-subject (others) similarity scores. Less overlap indicates better identifiability.
-
-![similarity_dist.png](report_assets/gambling/similarity_dist.png)
-
-**Full Correlation Matrix:**
-Raw Functional Connectivity matrix visualization.
-
-![full_correlation_matrix.png](report_assets/gambling/full_correlation_matrix.png)
-
-**Group Average Heatmap:**
-Similarity matrix using simple group averaging.
-
-![heatmap_group_avg.png](report_assets/gambling/heatmap_group_avg.png)
+- **Reconstruction Similarity Matrix:** ![heatmap](report_assets/gambling/heatmap_convae_sdl.png)
+- **Ablation Study:** ![ablation](report_assets/gambling/ablation_results.png)
+- **Robustness:** ![robustness](report_assets/gambling/robustness.png)
+- **Atoms:** ![atoms](report_assets/gambling/dictionary_atoms.png)
+- **Sim Dist:** ![sim_dist](report_assets/gambling/similarity_dist.png)
 
 ---
 
 ### 3.6 Task: LANGUAGE
 #### A. Comprehensive Metrics
-| Metric | Value | Description |
-|---|---|---|
-| Top-1 Accuracy | 0.8201 | Strict identification accuracy |
-| Top-3 Accuracy | 0.8968 | Correct match in top 3 |
-| Top-5 Accuracy | 0.9204 | Correct match in top 5 |
-| Top-10 Accuracy | 0.9558 | Correct match in top 10 |
-| Mean Rank | 4.35 | Average rank of correct subject |
-| Mean Reciprocal Rank | 0.8658 | Harmonic mean of ranks |
-| Differential Identifiability | 0.0978 | Separation between self/other |
+| Metric | Value |
+|---|---|
+| Top-1 Accuracy | 0.8201 |
+| Top-3 Accuracy | 0.8968 |
+| Top-5 Accuracy | 0.9204 |
+| Top-10 Accuracy | 0.9558 |
+| Mean Rank | 4.35 |
+| Mean Reciprocal Rank | 0.8658 |
+| Differential Identifiability | 0.0978 |
 
-#### B. Ablation Study (Component Analysis)
-Comparison of different architectural choices:
+#### B. Ablation Study
 | Method | Accuracy | Top-5 | MRR |
 |---|---|---|---|
 | raw_fc | 0.3186 | 0.4336 | 0.3812 |
@@ -599,13 +410,6 @@ Comparison of different architectural choices:
 | convae_sdl | 0.8201 | 0.9204 | 0.8658 |
 
 #### C. State-of-the-Art Comparison
-Comparison with existing methods and baselines:
-
-**Method Descriptions:**
-- **finn_2015:** The standard functional fingerprinting baseline using Pearson correlation of whole-brain functional connectivity matrices (Finn et al., 2015).
-- **edge_sel_Xpct:** A baseline method that selects only the top X% of edges with the highest discriminative power (differential identifiability) before correlation.
-- **proposed:** The proposed method utilizing Latent Reconstruction Error from the ConVAE-SDL architecture.
-
 | Method | Accuracy |
 |---|---|
 | finn_2015 | 0.3510 |
@@ -615,18 +419,15 @@ Comparison with existing methods and baselines:
 | proposed | 0.8201 |
 
 #### D. Statistical Validation
-Significance testing results:
 | Test | Result | Interpretation |
 |---|---|---|
 | Bootstrap Mean | 0.2123 +/- 0.0140 | Stability of the mean |
 | 95% CI | [0.1829, 0.2389] | Reliability range |
-| Permutation Test | 0.001996 | P-value < 0.05 indicates significance over random |
-| McNemar Test | 0.000000 | P-value < 0.05 indicates significance over baseline |
+| Permutation Test | 0.001996 | **Significant** (p < 0.05) |
+| McNemar Test | 0.000000 | **Significant** (p < 0.05) |
 
 #### E. Robustness Analysis
-**Noise Robustness (Accuracy vs Sigma):**
-- Evaluation of model performance when Gaussian noise is added to the input time series.
-
+**Noise Robustness:**
 | Noise Level (Sigma) | Accuracy |
 |---|---|
 | sigma=0 | 0.3186 +/- 0.0000 |
@@ -635,9 +436,7 @@ Significance testing results:
 | sigma=0.2 | 0.3174 +/- 0.0044 |
 | sigma=0.3 | 0.3215 +/- 0.0032 |
 
-**Sample Size Robustness (Accuracy vs N):**
-- Evaluation of model performance with varying number of subjects in the database.
-
+**Sample Size Robustness:**
 | Sample Size (N) | Accuracy |
 |---|---|
 | N=67 | 0.4090 +/- 0.0539 |
@@ -647,57 +446,27 @@ Significance testing results:
 | N=339 | 0.3186 +/- 0.0000 |
 
 #### F. Visualizations
-**Reconstruction Similarity Matrix (Proposed):**
-Shows the similarity scores between all pairs of subjects. A strong diagonal indicates high self-similarity (correct identification) and low cross-similarity.
-
-![heatmap_convae_sdl.png](report_assets/language/heatmap_convae_sdl.png)
-
-**Ablation Study:**
-Bar chart comparing the accuracy of the proposed method against baselines and partial implementations.
-
-![ablation_results.png](report_assets/language/ablation_results.png)
-
-**Robustness Analysis:**
-Curves showing how accuracy changes with increased noise and reduced sample sizes.
-
-![robustness.png](report_assets/language/robustness.png)
-
-**Learned Dictionary Atoms:**
-Visualization of the sparse components (atoms) learned by the K-SVD Dictionary Learning module, representing fundamental connectivity motifs.
-
-![dictionary_atoms.png](report_assets/language/dictionary_atoms.png)
-
-**Similarity Distributions:**
-Histograms of intra-subject (self) vs. inter-subject (others) similarity scores. Less overlap indicates better identifiability.
-
-![similarity_dist.png](report_assets/language/similarity_dist.png)
-
-**Full Correlation Matrix:**
-Raw Functional Connectivity matrix visualization.
-
-![full_correlation_matrix.png](report_assets/language/full_correlation_matrix.png)
-
-**Group Average Heatmap:**
-Similarity matrix using simple group averaging.
-
-![heatmap_group_avg.png](report_assets/language/heatmap_group_avg.png)
+- **Reconstruction Similarity Matrix:** ![heatmap](report_assets/language/heatmap_convae_sdl.png)
+- **Ablation Study:** ![ablation](report_assets/language/ablation_results.png)
+- **Robustness:** ![robustness](report_assets/language/robustness.png)
+- **Atoms:** ![atoms](report_assets/language/dictionary_atoms.png)
+- **Sim Dist:** ![sim_dist](report_assets/language/similarity_dist.png)
 
 ---
 
 ### 3.7 Task: RELATIONAL
 #### A. Comprehensive Metrics
-| Metric | Value | Description |
-|---|---|---|
-| Top-1 Accuracy | 0.6844 | Strict identification accuracy |
-| Top-3 Accuracy | 0.7906 | Correct match in top 3 |
-| Top-5 Accuracy | 0.8466 | Correct match in top 5 |
-| Top-10 Accuracy | 0.9027 | Correct match in top 10 |
-| Mean Rank | 5.83 | Average rank of correct subject |
-| Mean Reciprocal Rank | 0.7587 | Harmonic mean of ranks |
-| Differential Identifiability | 0.0844 | Separation between self/other |
+| Metric | Value |
+|---|---|
+| Top-1 Accuracy | 0.6844 |
+| Top-3 Accuracy | 0.7906 |
+| Top-5 Accuracy | 0.8466 |
+| Top-10 Accuracy | 0.9027 |
+| Mean Rank | 5.83 |
+| Mean Reciprocal Rank | 0.7587 |
+| Differential Identifiability | 0.0844 |
 
-#### B. Ablation Study (Component Analysis)
-Comparison of different architectural choices:
+#### B. Ablation Study
 | Method | Accuracy | Top-5 | MRR |
 |---|---|---|---|
 | raw_fc | 0.1976 | 0.3304 | 0.2727 |
@@ -708,13 +477,6 @@ Comparison of different architectural choices:
 | convae_sdl | 0.6844 | 0.8466 | 0.7587 |
 
 #### C. State-of-the-Art Comparison
-Comparison with existing methods and baselines:
-
-**Method Descriptions:**
-- **finn_2015:** The standard functional fingerprinting baseline using Pearson correlation of whole-brain functional connectivity matrices (Finn et al., 2015).
-- **edge_sel_Xpct:** A baseline method that selects only the top X% of edges with the highest discriminative power (differential identifiability) before correlation.
-- **proposed:** The proposed method utilizing Latent Reconstruction Error from the ConVAE-SDL architecture.
-
 | Method | Accuracy |
 |---|---|
 | finn_2015 | 0.2301 |
@@ -724,18 +486,15 @@ Comparison with existing methods and baselines:
 | proposed | 0.6844 |
 
 #### D. Statistical Validation
-Significance testing results:
 | Test | Result | Interpretation |
 |---|---|---|
 | Bootstrap Mean | 0.1416 +/- 0.0141 | Stability of the mean |
 | 95% CI | [0.1150, 0.1711] | Reliability range |
-| Permutation Test | 0.001996 | P-value < 0.05 indicates significance over random |
-| McNemar Test | 0.000000 | P-value < 0.05 indicates significance over baseline |
+| Permutation Test | 0.001996 | **Significant** (p < 0.05) |
+| McNemar Test | 0.000000 | **Significant** (p < 0.05) |
 
 #### E. Robustness Analysis
-**Noise Robustness (Accuracy vs Sigma):**
-- Evaluation of model performance when Gaussian noise is added to the input time series.
-
+**Noise Robustness:**
 | Noise Level (Sigma) | Accuracy |
 |---|---|
 | sigma=0 | 0.1976 +/- 0.0000 |
@@ -744,9 +503,7 @@ Significance testing results:
 | sigma=0.2 | 0.1971 +/- 0.0051 |
 | sigma=0.3 | 0.2006 +/- 0.0032 |
 
-**Sample Size Robustness (Accuracy vs N):**
-- Evaluation of model performance with varying number of subjects in the database.
-
+**Sample Size Robustness:**
 | Sample Size (N) | Accuracy |
 |---|---|
 | N=67 | 0.3403 +/- 0.0585 |
@@ -756,39 +513,8 @@ Significance testing results:
 | N=339 | 0.1976 +/- 0.0000 |
 
 #### F. Visualizations
-**Reconstruction Similarity Matrix (Proposed):**
-Shows the similarity scores between all pairs of subjects. A strong diagonal indicates high self-similarity (correct identification) and low cross-similarity.
-
-![heatmap_convae_sdl.png](report_assets/relational/heatmap_convae_sdl.png)
-
-**Ablation Study:**
-Bar chart comparing the accuracy of the proposed method against baselines and partial implementations.
-
-![ablation_results.png](report_assets/relational/ablation_results.png)
-
-**Robustness Analysis:**
-Curves showing how accuracy changes with increased noise and reduced sample sizes.
-
-![robustness.png](report_assets/relational/robustness.png)
-
-**Learned Dictionary Atoms:**
-Visualization of the sparse components (atoms) learned by the K-SVD Dictionary Learning module, representing fundamental connectivity motifs.
-
-![dictionary_atoms.png](report_assets/relational/dictionary_atoms.png)
-
-**Similarity Distributions:**
-Histograms of intra-subject (self) vs. inter-subject (others) similarity scores. Less overlap indicates better identifiability.
-
-![similarity_dist.png](report_assets/relational/similarity_dist.png)
-
-**Full Correlation Matrix:**
-Raw Functional Connectivity matrix visualization.
-
-![full_correlation_matrix.png](report_assets/relational/full_correlation_matrix.png)
-
-**Group Average Heatmap:**
-Similarity matrix using simple group averaging.
-
-![heatmap_group_avg.png](report_assets/relational/heatmap_group_avg.png)
-
----
+- **Reconstruction Similarity Matrix:** ![heatmap](report_assets/relational/heatmap_convae_sdl.png)
+- **Ablation Study:** ![ablation](report_assets/relational/ablation_results.png)
+- **Robustness:** ![robustness](report_assets/relational/robustness.png)
+- **Atoms:** ![atoms](report_assets/relational/dictionary_atoms.png)
+- **Sim Dist:** ![sim_dist](report_assets/relational/similarity_dist.png)
