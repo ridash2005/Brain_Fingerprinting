@@ -115,7 +115,6 @@
 - **Robustness Analysis:** ![robustness](report_assets/social/robustness.png)
 - **Learned Dictionary Atoms:** ![atoms](report_assets/social/dictionary_atoms.png)
 - **Similarity Distributions:** ![sim_dist](report_assets/social/similarity_dist.png)
-- **Full Correlation Matrix:** ![raw_matrix](report_assets/social/full_correlation_matrix.png)
 
 ---
 
