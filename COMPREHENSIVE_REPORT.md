@@ -115,6 +115,8 @@
 - **Robustness Analysis:** ![robustness](report_assets/social/robustness.png)
 - **Learned Dictionary Atoms:** ![atoms](report_assets/social/dictionary_atoms.png)
 - **Similarity Distributions:** ![sim_dist](report_assets/social/similarity_dist.png)
+- **Full Correlation Matrix:** ![raw_matrix](report_assets/social/full_correlation_matrix.png)
+- **Group Average Heatmap:** ![heatmap_group](report_assets/social/heatmap_group_avg.png)
 
 ---
 
@@ -182,6 +184,8 @@
 - **Robustness Analysis:** ![robustness](report_assets/motor/robustness.png)
 - **Learned Dictionary Atoms:** ![atoms](report_assets/motor/dictionary_atoms.png)
 - **Similarity Distributions:** ![sim_dist](report_assets/motor/similarity_dist.png)
+- **Full Correlation Matrix:** ![raw_matrix](report_assets/motor/full_correlation_matrix.png)
+- **Group Average Heatmap:** ![heatmap_group](report_assets/motor/heatmap_group_avg.png)
 
 ---
 
@@ -249,6 +253,8 @@
 - **Robustness Analysis:** ![robustness](report_assets/wm/robustness.png)
 - **Learned Dictionary Atoms:** ![atoms](report_assets/wm/dictionary_atoms.png)
 - **Similarity Distributions:** ![sim_dist](report_assets/wm/similarity_dist.png)
+- **Full Correlation Matrix:** ![raw_matrix](report_assets/wm/full_correlation_matrix.png)
+- **Group Average Heatmap:** ![heatmap_group](report_assets/wm/heatmap_group_avg.png)
 
 ---
 
@@ -316,6 +322,8 @@
 - **Robustness:** ![robustness](report_assets/emotion/robustness.png)
 - **Atoms:** ![atoms](report_assets/emotion/dictionary_atoms.png)
 - **Sim Dist:** ![sim_dist](report_assets/emotion/similarity_dist.png)
+- **Full Correlation Matrix:** ![raw_matrix](report_assets/emotion/full_correlation_matrix.png)
+- **Group Average Heatmap:** ![heatmap_group](report_assets/emotion/heatmap_group_avg.png)
 
 ---
 
@@ -383,6 +391,8 @@
 - **Robustness:** ![robustness](report_assets/gambling/robustness.png)
 - **Atoms:** ![atoms](report_assets/gambling/dictionary_atoms.png)
 - **Sim Dist:** ![sim_dist](report_assets/gambling/similarity_dist.png)
+- **Full Correlation Matrix:** ![raw_matrix](report_assets/gambling/full_correlation_matrix.png)
+- **Group Average Heatmap:** ![heatmap_group](report_assets/gambling/heatmap_group_avg.png)
 
 ---
 
@@ -450,6 +460,8 @@
 - **Robustness:** ![robustness](report_assets/language/robustness.png)
 - **Atoms:** ![atoms](report_assets/language/dictionary_atoms.png)
 - **Sim Dist:** ![sim_dist](report_assets/language/similarity_dist.png)
+- **Full Correlation Matrix:** ![raw_matrix](report_assets/language/full_correlation_matrix.png)
+- **Group Average Heatmap:** ![heatmap_group](report_assets/language/heatmap_group_avg.png)
 
 ---
 
@@ -517,3 +529,5 @@
 - **Robustness:** ![robustness](report_assets/relational/robustness.png)
 - **Atoms:** ![atoms](report_assets/relational/dictionary_atoms.png)
 - **Sim Dist:** ![sim_dist](report_assets/relational/similarity_dist.png)
+- **Full Correlation Matrix:** ![raw_matrix](report_assets/relational/full_correlation_matrix.png)
+- **Group Average Heatmap:** ![heatmap_group](report_assets/relational/heatmap_group_avg.png)
