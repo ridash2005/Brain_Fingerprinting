@@ -18,20 +18,20 @@ The following strict data protocol was enforced:
    - Identification via Pearson Correlation of the edge-vectors.
 2. **Metric-BolT (Xu et al., 2026) - DL Baseline**:
    - Focal Transformer architecture (BolT) with 4 expanding attention layers.
-   - Optimized via **TripletMarginLoss** (Margin = 0.7) using Cosine Distance.
+   - Optimized via **NT-Xent (Contrastive) Loss** (Temperature = 0.1).
    - CLS Token sequence summary as the final 360-dimensional fingerprint.
-   - Batch Size = 8, Learning Rate = 2e-4 (AdamW).
+   - Batch Size = 16, Learning Rate = 1e-4 (AdamW).
 
 ## 3. Comparative Results (HCP Benchmark)
 
 | Metric | Finn et al. (Baseline 2015) | Metric-BolT (Validated DL) |
 | :--- | :--- | :--- |
-| **Top-1 Accuracy** | **0.4600** (46%) | 0.0100 (1%) |
-| **Top-5 Accuracy** | **0.7800** (78%) | 0.1100 (11%) |
-| **MRR** | **0.5642** | 0.0737 |
+| **Top-1 Accuracy** | **0.4600** (46%) | 0.0400 (4%) |
+| **Top-5 Accuracy** | **0.7800** (78%) | 0.1300 (13%) |
+| **MRR** | **0.5642** | 0.0984 |
 
 > [!NOTE]
-> The failure of MetricBolT (1% accuracy) despite achieving near-zero training loss indicates a severe **overfit to Resting-State noise**. The transformer perfectly memorizes REST signatures but fails to extract the underlying neuroanatomical "invariants" required for cross-domain (Rest-to-Task) transfer.
+> The failure of MetricBolT (4% accuracy) despite achieving near-zero training loss indicates a severe **overfit to Resting-State noise**. The transformer perfectly memorizes REST signatures but fails to extract the underlying neuroanatomical "invariants" required for cross-domain (Rest-to-Task) transfer.
 
 ---
 
@@ -48,8 +48,8 @@ from Models.BolT.bolT import BolT
 from pytorch_metric_learning import losses
 
 def run_validated_baseline():
-    # 1. Environment: 375 frames, LR-only phase
-    # 2. Model: BolT Transformer + TripletLoss (Margin 0.7)
+    # 1. Environment: 284 frames, LR-only phase
+    # 2. Model: BolT Transformer + NT-Xent (Temp 0.1)
     # 3. Inference: Rest-to-Motor Domain Transfer (HCP)
     pass
 ```
@@ -62,7 +62,7 @@ def run_validated_baseline():
 ---
 
 ## 6. Why Metric-BolT Fails on the HCP Baseline
-While the original paper (Xu et al., 2026) reports >90% accuracy on the ABCD dataset, our HCP-based benchmark yielded 1% accuracy. This discrepancy arises from three fundamental factors:
+While the original paper (Xu et al., 2026) reports >90% accuracy on the ABCD dataset, our HCP-based benchmark yielded 4% accuracy. This discrepancy arises from three fundamental factors:
 
 1. **Cross-Domain Domain Gap**: The original paper performed *Rest-to-Rest* identification. Our benchmark requires *Rest-to-Motor* (cross-condition) transfer. Pure sequence transformers like BolT overfit to the temporal dynamics of the Resting-State, becoming unable to recognize the same subject under Task-driven brain activity.
 2. **The "Data Momentum" Requirement**: Transformer architectures require massive datasets (10,000+ subjects) to learn generalizable features. On our calibrated 100-subject cohort, the transformer minimizes loss by memorizing session-specific noise rather than invariant neuroanatomy.
