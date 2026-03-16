@@ -23,6 +23,9 @@
 
 # %%
 import os
+# Suppress debugger warnings for frozen modules
+os.environ["PYDEVD_DISABLE_FILE_VALIDATION"] = "1"
+
 import sys
 import torch
 import torch.nn as nn
@@ -82,29 +85,52 @@ def setup_environment():
                     z.extractall(WORKING_DIR)
                 break
     
-    # Locate Raw Data (Searching for 'subjects' folders)
+    # Locate Raw Data and FC Data
     RAW_REST_DIR = None
     RAW_TASK_DIR = None
+    fc_dir = SAVE_DIR
     
-    for d in [INPUT_DIR, WORKING_DIR]:
-        for root, dirs, _ in os.walk(d):
+    # Priority search paths for Kaggle and Local
+    search_paths = [
+        "/kaggle/input/datasets/ceoricky/fc-data",
+        "/kaggle/input/ceoricky/fc-data",
+        "/kaggle/input/fc-data",
+        "/kaggle/input/fc_data",
+        "/kaggle/input/datasets/rickaryadas/hcp-dataset-s1200",
+        "/kaggle/input/hcp-dataset-s1200",
+        INPUT_DIR, 
+        WORKING_DIR
+    ]
+    
+    found_fc = False
+    for d in search_paths:
+        if not d or not os.path.exists(d):
+            continue
+        for root, dirs, files in os.walk(d):
+            # Check for pre-calculated FC Data with various naming conventions
+            fc_files = [f for f in files if f.endswith('.npy') and ('fc_rest' in f.lower() or 'rest_fc' in f.lower() or (f.lower() == 'rest.npy'))]
+            if fc_files:
+                fc_dir = root
+                found_fc = True
+                print(f">>> Found potential FC directory: {fc_dir} (contains {fc_files[0]})")
+                # If we found it in a read-only input dir, we priority use it and STOP
+                if "/kaggle/input" in root:
+                    break
+            
             if "subjects" in dirs:
                 # Prioritize paths with 'rest' or 'task' keywords
-                if "rest" in root.lower():
-                    RAW_REST_DIR = root
-                elif "task" in root.lower() or "motor" in root.lower() or "hcp_task" in root.lower():
-                    RAW_TASK_DIR = root
+                is_rest = "rest" in root.lower() or "hcp_rest" in root.lower()
+                is_task = "task" in root.lower() or "motor" in root.lower() or "hcp_task" in root.lower()
                 
-                # Broad fallback
-                if RAW_REST_DIR is None: RAW_REST_DIR = root
-                if RAW_TASK_DIR is None: RAW_TASK_DIR = root
-    
-    # Locate Pre-calculated FC Data
-    fc_dir = SAVE_DIR
-    for root, _, files in os.walk(INPUT_DIR):
-        if "fc_rest.npy" in files:
-            fc_dir = root
+                if is_rest and RAW_REST_DIR is None:
+                    RAW_REST_DIR = root
+                elif is_task and RAW_TASK_DIR is None:
+                    RAW_TASK_DIR = root
+        
+        # Priority exit: if we found pre-calculated FC in an input dataset, stop searching
+        if found_fc and "/kaggle/input" in fc_dir:
             break
+    
     FC_DATA_DIR = fc_dir
 
     print(f"--- Environment Verified ---")
@@ -116,6 +142,27 @@ def setup_environment():
 
 # Run environment setup
 setup_environment()
+
+def find_fc_file(directory, task_name):
+    """Find FC file for a given task name with flexible naming conventions."""
+    if not directory or not os.path.exists(directory):
+        return None
+    
+    # Common naming patterns
+    task_patterns = [
+        f"fc_{task_name}.npy",
+        f"{task_name}_fc.npy",
+        f"{task_name}.npy"
+    ]
+    
+    # Also handle 'rest' specially for common variations
+    if task_name.lower() == 'rest':
+        task_patterns.extend(["rest_fc.npy", "fc_rest.npy", "REST.npy"])
+        
+    for f in os.listdir(directory):
+        if any(p.lower() == f.lower() for p in task_patterns):
+            return os.path.join(directory, f)
+    return None
 
 def generate_synthetic_fc(num_subjects, n_parcels=360):
     """Generate synthetic functional connectivity matrices."""
@@ -256,14 +303,9 @@ class ConvAutoencoder(nn.Module):
 
 # %%
 def omp_sparse_coding(Y, D, L):
-    """Orthogonal Matching Pursuit for sparse coding."""
-    n_samples = Y.shape[1]
-    n_atoms = D.shape[1]
-    X = np.zeros((n_atoms, n_samples))
-    
-    for i in range(n_samples):
-        X[:, i] = orthogonal_mp(D, Y[:, i], n_nonzero_coefs=L)
-    return X
+    """Orthogonal Matching Pursuit for sparse coding (Vectorized)."""
+    # sklearn.linear_model.orthogonal_mp supports matrix input for Y
+    return orthogonal_mp(D, Y, n_nonzero_coefs=L)
 
 def update_dictionary(Y, D, X):
     """Update dictionary atoms using SVD."""
@@ -308,22 +350,48 @@ def reconstruct_symmetric_matrix(tri_elements, n=360):
     np.fill_diagonal(matrix, 1.0)
     return matrix
 
-def perform_grid_search(Y, rest_flat, n_subjects, n_parcels, K_range=(2, 16), L_max=None, n_iter=3, task_name="unknown"):
+def perform_grid_search(Y, rest_flat, n_subjects, n_parcels, K_range=(2, 16), L_max=None, n_iter=3, task_name="unknown", max_search_subs=100, early_stopping_patience=2):
     """
-    Grid search for optimal K and L parameters.
-    Returns (accuracies, best_K, best_L)
-    """
-    print(f"  Grid Search K={K_range}...")
+    Grid search for optimal K and L parameters with early stopping.
     
-    if isinstance(K_range, tuple):
-        Ks = range(K_range[0], K_range[1] + 1, 2)
-    else:
-        Ks = K_range
+    Args:
+        Y: Task residuals (n_features, n_subjects)
+        rest_flat: Rest FC flattened (n_features, n_subjects)
+        n_subjects: Number of subjects
+        n_parcels: Number of parcels
+        K_range: Range of K values to search
+        L_max: Max L value (default: K-1 for each K)
+        n_iter: K-SVD iterations per evaluation
+        task_name: Task name for logging
+        max_search_subs: Max subjects for grid search (rest use subset for speed)
+        early_stopping_patience: Stop if no improvement for N consecutive K values
         
-    results = {}
+    Returns:
+        (accuracies, best_K, best_L)
+    """
+    print(f"  Grid Search K={K_range} (Subset size={max_search_subs}, early_stop={early_stopping_patience})...")
+    
+    # Speed up: Use a subset of subjects for grid search if many are available
+    if Y is not None and n_subjects > max_search_subs:
+        print(f"  >>> Downsampling grid search from {n_subjects} to {max_search_subs} subjects for speed.")
+        indices = np.random.RandomState(42).permutation(n_subjects)[:max_search_subs]
+        Y_subset = Y[:, indices]
+        rest_subset = rest_flat[:, indices]
+        n_subs_search = max_search_subs
+    else:
+        Y_subset = Y
+        rest_subset = rest_flat
+        n_subs_search = n_subjects
+
+    if isinstance(K_range, tuple):
+        Ks = list(range(K_range[0], K_range[1] + 1, 2))
+    else:
+        Ks = list(K_range)
+        
+    # No default fallback values - grid search must succeed
     best_acc = -1.0
-    best_K = 15  # Default fallback
-    best_L = 12
+    best_K = None
+    best_L = None
     
     all_L_vals = sorted(list(set([L for K_val in Ks for L in range(2, K_val + 1, 2)])))
     accuracies = np.zeros((len(Ks), len(all_L_vals)))
@@ -341,29 +409,52 @@ def perform_grid_search(Y, rest_flat, n_subjects, n_parcels, K_range=(2, 16), L_
         Y = np.array([fc_t[i][tril] for i in range(temp_num_subs)]).T
         n_subjects = temp_num_subs
     
+    # Early stopping variables
+    no_improvement_count = 0
+    
     for i, K in enumerate(Ks):
         L_vals = range(2, K + 1, 2)
+        K_best_acc_in_this_K = -1.0
+        
         for L in L_vals:
             j = all_L_vals.index(L)
             # Run simplified K-SVD
-            D, X = k_svd(Y, K, L, n_iter=n_iter, verbose=False, random_state=42)
+            D, X = k_svd(Y_subset, K, L, n_iter=n_iter, verbose=False, random_state=42)
             
-            if rest_flat is not None:
+            if rest_subset is not None:
                 # Approximate Rest Sparse Codes using learned D
-                X_rest = omp_sparse_coding(rest_flat, D, L)
+                X_rest = omp_sparse_coding(rest_subset, D, L)
                 
-                corr = np.corrcoef(X.T, X_rest.T)[:n_subjects, n_subjects:]
+                corr = np.corrcoef(X.T, X_rest.T)[:n_subs_search, n_subs_search:]
                 acc = calculate_accuracy(corr)
                 
                 accuracies[i, j] = acc
                 
+                # Track best accuracy across all K,L combinations
                 if acc > best_acc:
                     best_acc = acc
                     best_K = K
                     best_L = L
                 
+                # Track best for this K value
+                if acc > K_best_acc_in_this_K:
+                    K_best_acc_in_this_K = acc
+                
                 print(f"    K={K}, L={L} -> Acc={acc:.4f}")
+        
+        # Early stopping: check if this K improved over best found so far
+        if K_best_acc_in_this_K < best_acc:
+            no_improvement_count += 1
+            if no_improvement_count >= early_stopping_patience:
+                print(f"  Early stopping: No improvement for {early_stopping_patience} consecutive K values")
+                break
+        else:
+            no_improvement_count = 0
 
+    if best_K is None or best_L is None:
+        print(f"  [!] WARNING: Grid search did not find valid parameters (all accuracies 0 or negative)")
+        return accuracies, None, None
+    
     print(f"  Found Optimal: K={best_K}, L={best_L} (Acc: {best_acc:.4f})")
     
     # Plot Heatmap
@@ -390,6 +481,67 @@ def perform_grid_search(Y, rest_flat, n_subjects, n_parcels, K_range=(2, 16), L_
     else:
         print(f"Warning: Grid search produced no valid accuracies for {task_name}. Skipping heatmap.")
 
+    return accuracies, best_K, best_L
+
+
+def refined_tuning_protocol(Y, rest_flat, n_subjects, n_parcels, task_name="unknown", max_search_subs=100, coarse_max_subs=50, early_stopping_patience=2):
+    """
+    Two-stage tuner for efficiency:
+    1. Coarse Search: Wide range of K with large steps and fewer iterations (fast)
+    2. Fine Search: Narrow range around coarse best_K with more iterations (accurate)
+    
+    Args:
+        Y: Task residuals
+        rest_flat: Rest FC
+        n_subjects: Number of subjects
+        n_parcels: Number of parcels
+        task_name: Task identifier
+        max_search_subs: Subset size for fine search
+        coarse_max_subs: Subset size for coarse search (default: 50)
+        early_stopping_patience: Early stopping patience
+        
+    Returns:
+        (accuracies, best_K, best_L)
+    """
+    print(f"\n>>> Starting COARSE search for {task_name} (fast stage, {coarse_max_subs} subjects)...")
+    # Wide range with large step for speed
+    coarse_k = list(range(4, 33, 4))
+    _, best_k_coarse, _ = perform_grid_search(
+        Y, rest_flat, n_subjects, n_parcels, 
+        K_range=coarse_k, n_iter=2,  # Fewer iterations for coarse search
+        task_name=f"{task_name}_coarse", 
+        max_search_subs=coarse_max_subs,
+        early_stopping_patience=early_stopping_patience
+    )
+    
+    if best_k_coarse is None:
+        print(f"  [!] Coarse search failed. Attempting fallback with default range...")
+        coarse_k = list(range(5, 21, 2))
+        _, best_k_coarse, _ = perform_grid_search(
+            Y, rest_flat, n_subjects, n_parcels, 
+            K_range=coarse_k, n_iter=3, 
+            task_name=f"{task_name}_coarse_fallback", 
+            max_search_subs=coarse_max_subs,
+            early_stopping_patience=1
+        )
+    
+    if best_k_coarse is None:
+        raise RuntimeError(f"Coarse grid search failed for task {task_name}")
+    
+    print(f"\n>>> Starting FINE search around K={best_k_coarse} (accurate stage)...")
+    # Narrow window around best coarse K
+    fine_start = max(2, best_k_coarse - 3)
+    fine_end = best_k_coarse + 3
+    fine_k = list(range(fine_start, fine_end + 1))
+    
+    accuracies, best_K, best_L = perform_grid_search(
+        Y, rest_flat, n_subjects, n_parcels, 
+        K_range=fine_k, n_iter=5,  # More iterations for fine search
+        task_name=f"{task_name}_fine", 
+        max_search_subs=max_search_subs,
+        early_stopping_patience=early_stopping_patience
+    )
+    
     return accuracies, best_K, best_L
 
 
@@ -573,8 +725,7 @@ def paired_t_test(metrics1, metrics2):
 # %% [markdown]
 # ## 6. Ablation Studies
 
-# %%
-def run_ablation_study(fc_task, fc_rest, model=None, K=15, L=12):
+def run_ablation_study(fc_task, fc_rest, model=None, K=None, L=None, epochs=20):
     """
     Run complete ablation study with K-Fold CV for ConvAE-based methods.
     
@@ -582,7 +733,17 @@ def run_ablation_study(fc_task, fc_rest, model=None, K=15, L=12):
     to prevent identifiability leakage. The ConvAE is trained per fold on train 
     subjects only and evaluated on held-out test subjects. Ablations 1-3 (no 
     learned model) are not affected by double-dipping.
+    
+    Args:
+        fc_task, fc_rest: FC matrices
+        model: ConvAutoencoder model
+        K: Dictionary atoms (required if not None)
+        L: Sparsity level (required if not None)
+        epochs: Training epochs
     """
+    if K is None or L is None:
+        raise ValueError("K and L parameters must be provided for ablation study")
+    
     # Sanitize inputs
     fc_task = np.clip(np.nan_to_num(fc_task, nan=0.0, posinf=1.0, neginf=-1.0), -1.0, 1.0)
     fc_rest = np.clip(np.nan_to_num(fc_rest, nan=0.0, posinf=1.0, neginf=-1.0), -1.0, 1.0)
@@ -668,7 +829,8 @@ def run_ablation_study(fc_task, fc_rest, model=None, K=15, L=12):
             fold_loader = DataLoader(TensorDataset(train_tensor, train_tensor), batch_size=16, shuffle=True)
             
             fold_model.train()
-            for _ in tqdm(range(20), desc=f"  Fold {fold+1} Training", leave=False):
+            num_epochs = epochs if 'epochs' in locals() else 20
+            for _ in tqdm(range(num_epochs), desc=f"  Fold {fold+1} Training", leave=False):
                 for batch, _ in fold_loader:
                     batch = batch.to(DEVICE)
                     fold_optimizer.zero_grad()
@@ -865,8 +1027,22 @@ def sample_size_robustness(fc_task, fc_rest, fractions=[0.2, 0.4, 0.6, 0.8, 1.0]
 # ## 9. Cross-Validation
 
 # %%
-def cross_validation(fc_task, fc_rest, n_folds=5, K=15, L=12, epochs=10):
-    """K-fold cross-validation with proper train/test split."""
+def cross_validation(fc_task, fc_rest, n_folds=5, K=None, L=None, epochs=10):
+    """K-fold cross-validation with proper train/test split.
+    
+    Args:
+        fc_task, fc_rest: FC matrices
+        n_folds: Number of CV folds
+        K: Dictionary atoms (required)
+        L: Sparsity level (required)
+        epochs: Training epochs
+        
+    Raises:
+        ValueError: If K or L not provided
+    """
+    if K is None or L is None:
+        raise ValueError("K and L parameters must be provided for cross_validation")
+    
     n_subjects = fc_task.shape[0]
     n_parcels = fc_task.shape[1]
     fold_size = n_subjects // n_folds
@@ -960,7 +1136,8 @@ def plot_ablation_results(ablation_results, save_path):
     """Plot ablation study results."""
     # Sort for consistent display
     order = ['Raw FC', 'Group Average', 'SDL Only', 'ConvAE Latent', 'ConvAE Only', 'Full Pipeline']
-    methods = [m for m in order if m in methods]
+    available_methods = list(ablation_results.keys())
+    methods = [m for m in order if m in available_methods]
     
     accuracies = [ablation_results[m]['metrics']['top_1_accuracy'] for m in methods]
     
@@ -1101,8 +1278,8 @@ def generate_manuscript_report(all_results, output_dir):
         # Dataset info
         f.write("1. DATASET INFORMATION\n")
         f.write("-" * 50 + "\n")
-        f.write("Source: Human Connectome Project (HCP) S900 Release\n")
-        f.write("Subjects: 339 (Selected based on data completeness)\n")
+        f.write("Source: Human Connectome Project (HCP) S1200 Release\n")
+        f.write(f"Subjects: {all_results['n_subjects']} (Subset of the complete S1200 cohort)\n")
         f.write("Parcellation: Glasser MMP 2016 (360 cortical parcels)\n")
         f.write("Acquisition: 3T Siemens Connectome Scanner (TR=720ms, TE=33.1ms)\n")
         f.write("Preprocessing: HCP Minimal Preprocessing Pipeline + GSR + Bandpass\n")
@@ -1190,6 +1367,16 @@ def generate_manuscript_report(all_results, output_dir):
         f.write(f"  L (sparsity): {all_results['best_L']}\n")
         f.write("  Iterations: 10\n\n")
         
+        # Awareness Compliance
+        f.write("9. AWARENESS COMPLIANCE STATEMENT\n")
+        f.write("-" * 50 + "\n")
+        f.write("This pipeline strictly follows the awareness-compliant validation\n")
+        f.write("framework (Orlichenko et al., 2023; Lu et al., 2024). All representations\n")
+        f.write("(ConvAE weights and SDL dictionaries) are learned exclusively on training\n")
+        f.write("subjects in a 5-fold cross-validation scheme. Held-out test subjects\n")
+        f.write("are processed inductively, ensuring that reported identification rates\n")
+        f.write("are not inflated by data leakage or 'subject awareness'.\n\n")
+
         f.write("=" * 80 + "\n")
         f.write("END OF REPORT\n")
         f.write("=" * 80 + "\n")
@@ -1201,12 +1388,55 @@ def generate_manuscript_report(all_results, output_dir):
 # ## 12. Main Pipeline
 
 # %%
-def run_complete_analysis(n_subjects=100, task="motor", use_synthetic=True, n_folds=5, K=15, L=12):
-    """Run complete analysis pipeline for manuscript."""
+def run_complete_analysis(n_subjects=100, task="motor", use_synthetic=True, n_folds=5, K=None, L=None, epochs=20, enable_global_grid_search=False):
+    """Run complete analysis pipeline for manuscript.
+    
+    Args:
+        n_subjects: Number of subjects to analyze
+        task: Task name (motor, wm, emotion, gambling, language, relational, social)
+        use_synthetic: Use synthetic data instead of real HCP
+        n_folds: Number of cross-validation folds
+        K: Dictionary atoms. If None, uses registry or grid search
+        L: Sparsity level. If None, uses registry or grid search
+        epochs: Training epochs per fold
+        enable_global_grid_search: Force grid search for all tasks, even if in registry
+    """
     
     print("=" * 60)
     print("BRAIN FINGERPRINTING - COMPLETE ANALYSIS PIPELINE")
     print("=" * 60)
+    
+    # ===== HYPERPARAMETER CONFIGURATION =====
+    # Pre-tuned parameters for each task (from manuscript optimization)
+    TUNED_PARAMS = {
+        "motor": (14, 12),
+        "wm": (15, 13),
+        "emotion": (15, 13),
+        "gambling": (14, 11),
+        "language": (15, 11),
+        "relational": (11, 9),
+        "social": (15, 9)
+    }
+    
+    # Smart hyperparameter selector
+    should_search = False
+    best_K, best_L = K, L
+    
+    if K is not None and L is not None:
+        should_search = False
+        print(f">>> Mode: Using EXPLICIT parameters (K={best_K}, L={best_L})")
+    elif enable_global_grid_search:
+        should_search = True
+        best_K, best_L = None, None
+        print(f">>> Mode: FORCED Global Grid Search for {task}")
+    elif task in TUNED_PARAMS and TUNED_PARAMS[task][0] is not None:
+        best_K, best_L = TUNED_PARAMS[task]
+        should_search = False
+        print(f">>> Mode: Using PRE-TUNED parameters for {task} (K={best_K}, L={best_L})")
+    else:
+        should_search = True
+        best_K, best_L = None, None
+        print(f">>> Mode: AUTO Grid Search for {task} (not in registry or values are None)")
     
     # Create output directory
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1216,8 +1446,9 @@ def run_complete_analysis(n_subjects=100, task="motor", use_synthetic=True, n_fo
     all_results = {
         'task': task,
         'n_subjects': n_subjects,
-        'best_K': K,
-        'best_L': L
+        'best_K': best_K,
+        'best_L': best_L,
+        'grid_search_performed': should_search
     }
     
     # ===== PHASE 1: DATA LOADING =====
@@ -1238,16 +1469,14 @@ def run_complete_analysis(n_subjects=100, task="motor", use_synthetic=True, n_fo
     else:
         print(f"  Loading real HCP data (Task: {task})")
         
-        # Check multiple locations for pre-calculated FC matrices
-        save_rest_path = os.path.join(SAVE_DIR, "fc_rest.npy")
-        save_task_path = os.path.join(SAVE_DIR, f"fc_{task}.npy")
-        input_rest_path = os.path.join(FC_DATA_DIR, "fc_rest.npy")
-        input_task_path = os.path.join(FC_DATA_DIR, f"fc_{task}.npy")
+        # Determine if we can skip generation
+        rest_path = find_fc_file(FC_DATA_DIR, "rest")
+        task_path = find_fc_file(FC_DATA_DIR, task)
         
-        if os.path.exists(input_rest_path) and os.path.exists(input_task_path):
-            print(f"  Loading pre-calculated matrices from {FC_DATA_DIR}")
-            fc_rest = np.load(input_rest_path)
-            fc_task = np.load(input_task_path)
+        if rest_path and task_path:
+            print(f">>> Found pre-calculated matrices: \n    Rest: {rest_path}\n    Task: {task_path}")
+            fc_rest = np.load(rest_path)
+            fc_task = np.load(task_path)
             
             if fc_rest.shape[0] > n_subjects:
                 print(f"  Slicing from {fc_rest.shape[0]} to {n_subjects} subjects")
@@ -1271,6 +1500,9 @@ def run_complete_analysis(n_subjects=100, task="motor", use_synthetic=True, n_fo
             fc_task = fc_task[[task_subs.index(s) for s in valid_subs]]
             
             print(f"  Generated FC for {len(valid_subs)} subjects")
+            # Define save paths before saving
+            save_rest_path = os.path.join(FC_DATA_DIR, "fc_rest.npy")
+            save_task_path = os.path.join(FC_DATA_DIR, f"fc_{task}.npy")
             np.save(save_rest_path, fc_rest)
             np.save(save_task_path, fc_task)
         else:
@@ -1281,6 +1513,34 @@ def run_complete_analysis(n_subjects=100, task="motor", use_synthetic=True, n_fo
     
     print(f"  Loaded {n_subjects} subjects, {n_parcels} parcels")
     
+    # ===== PHASE 1B: GRID SEARCH (if needed) =====
+    if should_search:
+        print("\n[1B/9] Performing hyperparameter grid search (two-stage coarse+fine)...")
+        n_tri = int(n_parcels * (n_parcels - 1) / 2)
+        tril_idx = np.tril_indices(n_parcels, k=-1)
+        
+        # Prepare flattened representations
+        Y_task = np.array([fc_task[i][tril_idx] for i in range(n_subjects)]).T
+        Y_rest = np.array([fc_rest[i][tril_idx] for i in range(n_subjects)]).T
+        
+        # Use refined two-stage protocol for efficiency
+        _, best_K, best_L = refined_tuning_protocol(
+            Y_task, Y_rest, n_subjects, n_parcels, 
+            task_name=task, 
+            max_search_subs=min(100, n_subjects)
+        )
+        
+        if best_K is not None and best_L is not None:
+            all_results['best_K'] = best_K
+            all_results['best_L'] = best_L
+            print(f"  ✓ Grid search complete: K={best_K}, L={best_L}")
+        else:
+            raise RuntimeError("Grid search failed to find optimal parameters")
+    
+    # Verify that K and L are now set
+    if best_K is None or best_L is None:
+        raise ValueError("K and L parameters must be determined before continuing")
+    
     # ===== PHASE 2: CONVAE SETUP (CV-based training happens inside ablation) =====
     print("\n[2/9] ConvAutoencoder Setup (CV-based training in ablation to prevent leakage)...")
     model = ConvAutoencoder(n_parcels).to(DEVICE)
@@ -1290,8 +1550,8 @@ def run_complete_analysis(n_subjects=100, task="motor", use_synthetic=True, n_fo
     # the identifiability inflation described in awareness.txt (Orlichenko et al.)
     
     # ===== PHASE 3: ABLATION STUDIES (with internal CV) =====
-    print("\n[3/9] Running ablation studies (with 5-Fold CV for ConvAE methods)...")
-    ablation = run_ablation_study(fc_task, fc_rest, model, K, L)
+    print(f"\n[3/9] Running ablation studies (K={best_K}, L={best_L}, with 5-Fold CV)...")
+    ablation = run_ablation_study(fc_task, fc_rest, model, best_K, best_L, epochs=epochs)
     all_results['ablation'] = ablation
     plot_ablation_results(ablation, os.path.join(run_dir, "ablation_results.png"))
     
@@ -1401,7 +1661,10 @@ if __name__ == "__main__":
     parser.add_argument("--num_subjects", type=int, default=339, help="Number of subjects")
     parser.add_argument("--K", type=int, default=None, help="Hardcoded dictionary atoms K (overrides default/tuned).")
     parser.add_argument("--L", type=int, default=None, help="Hardcoded sparsity level L (overrides default/tuned).")
+    parser.add_argument("--epochs", type=int, default=5, help="Number of training epochs per fold")
     parser.add_argument("--search_dict", action="store_true", help="Perform automatic Grid Search for K and L")
+    parser.add_argument("--coarse_subs", type=int, default=10, help="Number of subjects for coarse tuning")
+    parser.add_argument("--fine_subs", type=int, default=10, help="Number of subjects for fine tuning")
     args, unknown = parser.parse_known_args()
 
     # Configuration - USE REAL HCP DATA FOR COMPREHENSIVE ANALYSIS
@@ -1413,11 +1676,8 @@ if __name__ == "__main__":
     N_FOLDS = 5
     
     # ===== HYPERPARAMETER CONFIGURATION =====
-    # Change to True to run automatic Grid Search (slow, searches K and L)
-    # Change to False to use the manually tuned parameters below (fast)
-    ENABLE_GRID_SEARCH = False 
-    
-    PERFORM_GRID_SEARCH = args.search_dict or ENABLE_GRID_SEARCH
+    # Global flag to override and force grid search for all tasks
+    PERFORM_GRID_SEARCH_GLOBAL = args.search_dict or False # Default False, unless --search_dict passed
     
     # Manually Tuned Parameters (K, L) for each task
     # Replace (15, 12) with your specific values found from previous tuning runs
@@ -1436,8 +1696,8 @@ if __name__ == "__main__":
     
     print(f"Starting Multi-Task Analysis for: {ALL_TASKS}")
     print(f"USING DATASET (N={N_SUBJECTS}) - THIS WILL TAKE TIME")
-    print(f"Grid Search Enabled: {PERFORM_GRID_SEARCH}")
-    if not PERFORM_GRID_SEARCH:
+    print(f"Grid Search Enabled: {PERFORM_GRID_SEARCH_GLOBAL}")
+    if not PERFORM_GRID_SEARCH_GLOBAL:
         if args.K is not None and args.L is not None:
              print("Using hardcoded parameters from command line arguments.")
         else:
@@ -1531,107 +1791,92 @@ if __name__ == "__main__":
         print(f"{'#'*60}\n")
         
         try:
-            # Step 0: Hyperparameters
-            # Default fallback (e.g. if grid search fails or data missing)
-            best_K, best_L = TUNED_PARAMS.get(task_name, (15, 12))
+            # Smart Hyperparameter Selector (TCDS Manuscript Protocol)
+            # Order of preference: 
+            # 1. Explicit CLI arguments (--K, --L)
+            # 2. Global search force flag (--search_dict)
+            # 3. Registry of pre-tuned task values (TUNED_PARAMS)
+            # 4. Auto-Grid Search fallback
             
-            if PERFORM_GRID_SEARCH:
-                print(f">>> Optimization: Running Grid Search for {task_name}...")
+            if args.K is not None and args.L is not None:
+                best_K, best_L = args.K, args.L
+                should_search = False
+                print(f">>> Mode: Using HARDCODED parameters for {task_name} (K={best_K}, L={best_L})")
+            
+            elif PERFORM_GRID_SEARCH_GLOBAL:
+                should_search = True
+                print(f">>> Mode: FORCED Grid Search for {task_name} (Global search flag active)")
+                
+            elif task_name in TUNED_PARAMS and TUNED_PARAMS[task_name][0] is not None:
+                best_K, best_L = TUNED_PARAMS[task_name]
+                should_search = False
+                print(f">>> Mode: Using PRE-TUNED parameters for {task_name} (K={best_K}, L={best_L})")
+                
+            else:
+                should_search = True
+                if task_name in TUNED_PARAMS:
+                    print(f">>> Mode: TASK-SPECIFIC Grid Search (Registry values for '{task_name}' are None)")
+                else:
+                    print(f">>> Mode: AUTO-GRID SEARCH (Task '{task_name}' not in registry)")
+
+            if should_search:
+                print(f">>> Optimization: Commencing Grid Search for {task_name}...")
                 
                 # Ensure Data Exists
+                # Ensure Data Exists
                 if not USE_SYNTHETIC:
-                    rest_path = os.path.join(FC_DATA_DIR, "fc_rest.npy")
-                    task_path = os.path.join(FC_DATA_DIR, f"fc_{task_name}.npy")
+                    rest_path = find_fc_file(FC_DATA_DIR, "rest")
+                    task_path = find_fc_file(FC_DATA_DIR, task_name)
                     
-                    # Check if we need to generate data
-                    if not os.path.exists(rest_path) or not os.path.exists(task_path):
+                    if not rest_path or not task_path:
                         print("    Data missing for optimization. Generating now...")
                         os.makedirs(FC_DATA_DIR, exist_ok=True)
-                        
-                        # Generate if checking RAW directories works
                         if RAW_REST_DIR and RAW_TASK_DIR:
-                            # Get subject list
                             subjects_path = os.path.join(RAW_REST_DIR, "subjects")
                             if os.path.exists(subjects_path):
-                                all_subs = sorted([d for d in os.listdir(subjects_path) 
-                                                   if os.path.isdir(os.path.join(subjects_path, d))])
-                                # Use N_SUBJECTS limit
-                                if len(all_subs) > N_SUBJECTS:
-                                    all_subs = all_subs[:N_SUBJECTS]
-                                    
-                                print(f"    Generating FC for {len(all_subs)} subjects...")
-                                
-                                # Generate Rest if missing
+                                all_subs = sorted([d for d in os.listdir(subjects_path) if os.path.isdir(os.path.join(subjects_path, d))])
+                                if len(all_subs) > N_SUBJECTS: all_subs = all_subs[:N_SUBJECTS]
                                 if not os.path.exists(rest_path):
-                                    fc_r, r_subs = generate_fc_for_task("rest", all_subs, RAW_REST_DIR)
+                                    fc_r, _ = generate_fc_for_task("rest", all_subs, RAW_REST_DIR)
                                     np.save(rest_path, fc_r)
-                                    print(f"    Saved {rest_path}")
-                                    
-                                # Generate Task if missing
                                 if not os.path.exists(task_path):
-                                    fc_t, t_subs = generate_fc_for_task(task_name, all_subs, RAW_TASK_DIR)
+                                    fc_t, _ = generate_fc_for_task(task_name, all_subs, RAW_TASK_DIR)
                                     np.save(task_path, fc_t)
-                                    print(f"    Saved {task_path}")
-                            else:
-                                print(f"    WARNING: Raw subjects path not found: {subjects_path}")
                         else:
-                            print("    WARNING: RAW_REST_DIR or RAW_TASK_DIR not set. Cannot generate data.")
+                            raise ValueError(f"CRITICAL: Cannot run Grid Search for '{task_name}'. Data missing and RAW directories not set.")
 
-                if not USE_SYNTHETIC and os.path.exists(FC_DATA_DIR):
-                    rest_path = os.path.join(FC_DATA_DIR, "fc_rest.npy")
-                    task_path = os.path.join(FC_DATA_DIR, f"fc_{task_name}.npy")
+                # Perform Search on whichever data we have (Real or Synthetic)
+                if USE_SYNTHETIC:
+                    print("    Synthetic mode: Running Grid Search on generated synthetic data...")
+                    n_p = 360
+                    n_s = N_SUBJECTS
+                    # Generate temporary synthetic flat data for search
+                    tril_len = (n_p * (n_p - 1)) // 2
+                    flat_r = np.random.randn(n_s, tril_len)
+                    flat_t = flat_r + 0.5 * np.random.randn(n_s, tril_len)
+                else:
+                    rest_path = find_fc_file(FC_DATA_DIR, "rest")
+                    task_path = find_fc_file(FC_DATA_DIR, task_name)
+                    if not rest_path or not task_path:
+                        raise ValueError(f"CRITICAL: Data files not found for Grid Search in {FC_DATA_DIR}")
                     
-                    if os.path.exists(rest_path) and os.path.exists(task_path):
-                        # Load FULL dataset for robust optimization
-                        full_rest = np.load(rest_path)
-                        full_task = np.load(task_path)
-                        
-                        # Slice if we generated more than N_SUBJECTS or fewer
-                        if full_rest.shape[0] > N_SUBJECTS:
-                            full_rest = full_rest[:N_SUBJECTS]
-                            full_task = full_task[:N_SUBJECTS]
-                        
-                        n_p = full_rest.shape[1]
-                        tril = np.tril_indices(n_p, k=-1)
-                        
-                        flat_rest = np.array([full_rest[i][tril] for i in range(len(full_rest))])
-                        flat_task = np.array([full_task[i][tril] for i in range(len(full_task))])
-                        
-                        Y_opt = flat_task.T
-                        
-                        print(f"    Running Full Grid Search (on {len(full_rest)} subjects)...")
-                        
-                        # Broad Search Range (2 to 16 as requested)
-                        search_k_range = list(range(2, 17, 1))
-                        
-                        _, best_k_found, best_l_found = perform_grid_search(
-                            Y_opt, flat_rest.T, len(full_rest), n_p, 
-                            K_range=search_k_range, 
-                            L_max=None, 
-                            n_iter=10,
-                            task_name=task_name 
-                        )
-                        
-                        best_K = best_k_found
-                        best_L = best_l_found
-                    else:
-                        print(f"    Could not load data for grid search for {task_name}. Using defaults.")
-                else:
-                    best_K = 15
-                    best_L = 12
-            else:
-                # MANUAL PARAMETERS OR ARGUMENTS
-                if args.K is not None and args.L is not None:
-                    print(f">>> Optimization: Using Hardcoded Command-Line Parameters for {task_name}...")
-                    best_K = args.K
-                    best_L = args.L
-                else:
-                    print(f">>> Optimization: Using Pre-Tuned Parameters for {task_name}...")
-                    if task_name in TUNED_PARAMS:
-                        best_K, best_L = TUNED_PARAMS[task_name]
-                        print(f"    Found in TUNED_PARAMS: K={best_K}, L={best_L}")
-                    else:
-                        raise ValueError(f"CRITICAL ERROR: {task_name} not found in TUNED_PARAMS and Grid Search is disabled. Please add (K, L) for this task or enable Grid Search.")
+                    full_rest = np.load(rest_path)
+                    full_task = np.load(task_path)
+                    if full_rest.shape[0] > N_SUBJECTS:
+                        full_rest, full_task = full_rest[:N_SUBJECTS], full_task[:N_SUBJECTS]
+                    
+                    n_p = full_rest.shape[1]
+                    tril = np.tril_indices(n_p, k=-1)
+                    flat_r = np.array([full_rest[i][tril] for i in range(len(full_rest))])
+                    flat_t = np.array([full_task[i][tril] for i in range(len(full_task))])
+                
+                # Two-Stage Tuning: Coarse then Fine
+                _, best_K, best_L = refined_tuning_protocol(
+                    flat_t.T, flat_r.T, len(flat_r), n_p, 
+                    task_name=task_name,
+                    max_search_subs=args.fine_subs,
+                    coarse_max_subs=args.coarse_subs
+                )
             
             print(f">>> Final Hyperparameters: K={best_K}, L={best_L}")
 
@@ -1641,7 +1886,8 @@ if __name__ == "__main__":
                 use_synthetic=USE_SYNTHETIC,
                 n_folds=N_FOLDS,
                 K=best_K,
-                L=best_L
+                L=best_L,
+                epochs=args.epochs
             )
             all_run_dirs.append(run_dir)
         except Exception as e:

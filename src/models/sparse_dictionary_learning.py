@@ -369,10 +369,14 @@ def perform_grid_search(
     n_features: int, 
     K_range: Tuple[int, int] = (2, 16), 
     n_iter: int = 3, 
-    task_name: str = "unknown"
-) -> Tuple[np.ndarray, int, int]:
+    task_name: str = "unknown",
+    max_search_subs: int = 100,
+    early_stopping_patience: int = 2
+) -> Tuple[np.ndarray, Optional[int], Optional[int]]:
     """
     Grid search for optimal K and L parameters based on Identification Accuracy.
+    
+    Uses early stopping and subject downsampling for efficiency.
     
     Parameters
     ----------
@@ -390,41 +394,61 @@ def perform_grid_search(
         Number of iterations for K-SVD
     task_name : str
         Name of task for logging
+    max_search_subs : int
+        Maximum subjects to use in grid search (for speed)
+    early_stopping_patience : int
+        Stop if no improvement for N consecutive K values
         
     Returns
     -------
     accuracies : np.ndarray
         Grid of accuracies
-    best_K : int
-        Optimal K
-    best_L : int
-        Optimal L
+    best_K : Optional[int]
+        Optimal K (None if grid search failed)
+    best_L : Optional[int]
+        Optimal L (None if grid search failed)
     """
-    print(f"  Grid Search K={K_range} for {task_name}...")
+    print(f"  Grid Search K={K_range} for {task_name} (subset={max_search_subs}, patience={early_stopping_patience})...")
     
-    Ks = range(K_range[0], K_range[1] + 1, 2)
-    accuracies = np.zeros((len(Ks), len(Ks)))
+    # Downsample subjects for grid search speed
+    if n_subjects > max_search_subs:
+        print(f"  >>> Downsampling grid search from {n_subjects} to {max_search_subs} subjects for speed.")
+        indices = np.random.RandomState(42).permutation(n_subjects)[:max_search_subs]
+        Y_subset = Y[:, indices]
+        rest_flat_subset = rest_flat[:, indices]
+        n_subs_search = max_search_subs
+    else:
+        Y_subset = Y
+        rest_flat_subset = rest_flat
+        n_subs_search = n_subjects
+    
+    Ks = list(range(K_range[0], K_range[1] + 1, 2))
+    all_L_vals = sorted(list(set([L for K_val in Ks for L in range(2, K_val + 1, 2)])))
+    accuracies = np.zeros((len(Ks), len(all_L_vals)))
     
     best_acc = -1.0
-    best_K = 15
-    best_L = 12
+    best_K = None
+    best_L = None
+    no_improvement_count = 0
     
     for i, K in enumerate(Ks):
         L_vals = range(2, K + 1, 2)
-        for j, L in enumerate(L_vals):
+        K_best_acc = -1.0
+        
+        for L in L_vals:
+            j = all_L_vals.index(L)
             # Run simplified K-SVD
-            D, X = k_svd(Y, K, L, n_iter=n_iter, verbose=False, random_state=42)
+            D, X = k_svd(Y_subset, K, L, n_iter=n_iter, verbose=False, random_state=42)
             
-            if rest_flat is not None:
+            if rest_flat_subset is not None:
                 # Approximate Rest Sparse Codes using learned D
-                X_rest = omp_sparse_coding(rest_flat[:, :n_subjects], D, L)
-                X_task = X[:, :n_subjects]
+                X_rest = omp_sparse_coding(rest_flat_subset, D, L)
                 
                 # Correlation between sparse codes
-                corr = np.corrcoef(X_task.T, X_rest.T)[:n_subjects, n_subjects:]
+                corr = np.corrcoef(X.T, X_rest.T)[:n_subs_search, n_subs_search:]
                 acc = calculate_accuracy_inline(corr)
                 
-                if j < len(Ks): # Safety check for indexing
+                if j < len(all_L_vals):
                     accuracies[i, j] = acc
                 
                 if acc > best_acc:
@@ -432,13 +456,23 @@ def perform_grid_search(
                     best_K = K
                     best_L = L
                 
-                print(f"    K={K}, L={L} -> Acc={acc:.4f}")
-            else:
-                # Fallback purely on reconstruction error (not implemented here for brevity)
-                pass
-
-    print(f"  Found Optimal: K={best_K}, L={best_L} (Acc: {best_acc:.4f})")
+                if acc > K_best_acc:
+                    K_best_acc = acc
+        
+        # Early stopping: check if this K improved over best found so far
+        if K_best_acc < best_acc:
+            no_improvement_count += 1
+            if no_improvement_count >= early_stopping_patience:
+                print(f"  Early stopping: No improvement for {early_stopping_patience} consecutive K values")
+                break
+        else:
+            no_improvement_count = 0
     
+    if best_K is None or best_L is None:
+        print(f"  [!] WARNING: Grid search did not find valid parameters")
+        return accuracies, None, None
+    
+    print(f"  Found Optimal: K={best_K}, L={best_L} (Acc: {best_acc:.4f})")
     return accuracies, best_K, best_L
 
 

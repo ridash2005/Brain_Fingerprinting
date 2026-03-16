@@ -55,7 +55,26 @@ class CrossValidation:
         return model
 
     def run_cross_validation(self, fc_task: np.ndarray, fc_rest: np.ndarray, 
-                           output_dir: str, K: int = 15, L: int = 12) -> Dict:
+                           output_dir: str, K: int = None, L: int = None) -> Dict:
+        """
+        Run K-fold cross-validation with awareness-compliant training.
+        
+        Args:
+            fc_task: Task FC matrices
+            fc_rest: Rest FC matrices
+            output_dir: Output directory
+            K: Dictionary atoms (required)
+            L: Sparsity level (required)
+            
+        Returns:
+            Dictionary with CV results
+            
+        Raises:
+            ValueError: If K or L not provided
+        """
+        if K is None or L is None:
+            raise ValueError("K and L parameters must be provided for cross_validation")
+        
         os.makedirs(output_dir, exist_ok=True)
         accuracies = []
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

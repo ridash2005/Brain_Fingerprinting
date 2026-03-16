@@ -80,7 +80,7 @@ The following heatmap demonstrates the **Reconstruction Similarity Matrix** (Lan
     ```
 
 3.  **Data Setup:**
-    - Ensure you have access to the **HCP S900** dataset (rest and task fMRI).
+    - Ensure you have access to the **HCP S1200** dataset (rest and task fMRI).
     - Update `config/basic_parameters.txt` to point to your local data path.
 
 ---
