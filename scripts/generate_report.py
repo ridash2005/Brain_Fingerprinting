@@ -283,10 +283,21 @@ def generate_markdown(all_results, output_file):
             f.write("---\n")
 
 def main():
-    base_dir = r'd:\GitHub\my_repo\Brain_Fingerprinting\results\hcp_fingerprinting_results_20260124_233031'
-    if not os.path.exists(base_dir):
-        # Fallback search
-        base_dir = r'results/hcp_fingerprinting_results_20260124_233031'
+    results_parent = 'results'
+    if not os.path.exists(results_parent):
+        os.makedirs(results_parent, exist_ok=True)
+        print("No results directory found.")
+        return
+
+    # Find the latest hcp_fingerprinting_results directory
+    dirs = [d for d in os.listdir(results_parent) if os.path.isdir(os.path.join(results_parent, d)) and d.startswith('hcp_fingerprinting_results_')]
+    if not dirs:
+        print("No hcp_fingerprinting_results_* directories found in results/")
+        return
+    
+    latest_dir = sorted(dirs)[-1]
+    base_dir = os.path.join(results_parent, latest_dir)
+    print(f"Using latest results directory: {base_dir}")
         
     all_results = {}
     
@@ -311,7 +322,7 @@ def main():
                 # D:\GitHub\my_repo\Brain_Fingerprinting\results\hcp_fingerprinting_results_...\run_...
                 # Relative: results/hcp.../run...
                 
-                rel_path = f"results/hcp_fingerprinting_results_20260124_233031/{item}"
+                rel_path = f"results/{latest_dir}/{item}"
                 
                 all_results[task_name] = {
                     'data': data,

@@ -1,9 +1,12 @@
 import argparse
 import numpy as np
 import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader, TensorDataset
 import matplotlib.pyplot as plt
 import seaborn as sns
-import logging  # Import logging
+import logging
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
@@ -17,6 +20,7 @@ from src.utils.matrix_ops import *
 parser = argparse.ArgumentParser(description='Functional Connectome Task Selection')
 parser.add_argument('-data', type=str, required=True, choices=['rest', 'motor', 'wm', 'emotion'], help="Data on which the model was trained: rest, motor, wm, or emotion")
 parser.add_argument('-task', type=str, required=True, choices=['rest', 'motor', 'wm', 'emotion'], help="Task to analyze: rest, motor, wm, or emotion")
+parser.add_argument('-n_folds', type=int, default=5, help="Number of CV folds (default: 5)")
 args = parser.parse_args()
 
 # Basic parameters
@@ -26,68 +30,125 @@ LOG_DIR = ensure_dir(os.path.join("logs", "runs", f"{RUN_ID}_optimize_{args.data
 HCP_DIR = basic_parameters['HCP_DIR']
 N_SUBJECTS = basic_parameters['N_SUBJECTS']
 N_PARCELS = basic_parameters['N_PARCELS']
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 # Set up logging
 log_file = os.path.join(LOG_DIR, 'accuracy_log.txt')
 logging.basicConfig(filename=log_file, level=logging.INFO, format='%(message)s', filemode='a')
 print(f"Logging optimization results to {log_file}")
 
-# Load the trained model based on the training data
-model = ConvAutoencoder()
-model.load_state_dict(torch.load(f'./src/models/trained/conv_ae_{args.data}_best_model.pth'))
-model.eval()
-
-# Select the appropriate functional connectome (FC) data based on the testing task
+# Load data
 fc_task = np.load(f'FC_DATA/fc_{args.task}.npy')
-fc_task = fc_task[:, np.newaxis, :, :]
-fc_task_tensor = torch.tensor(fc_task, dtype=torch.float32)
+fc_train_data = np.load(f'FC_DATA/fc_{args.data}.npy')
 
-# Perform reconstruction
-with torch.no_grad():
-    fc_task_reconstr = model(fc_task_tensor)
+# ==========================================
+# NESTED CROSS-VALIDATION (Awareness Fix)
+# 
+# The hyperparameter search uses K-Fold CV:
+# - ConvAE trained on TRAIN subjects per fold
+# - SDL applied inductively (train dict → test coding)
+# - Accuracy evaluated on HELD-OUT subjects only
+# This prevents identifiability leakage where
+# the model memorizes subjects across scans.
+# ==========================================
+n_folds = args.n_folds
+indices = np.random.RandomState(42).permutation(N_SUBJECTS)
+fold_size = N_SUBJECTS // n_folds
 
-# Calculate the residuals
-fc_task_residual = fc_task_tensor.squeeze(1) - fc_task_reconstr.squeeze(1)
+logging.info(f"# {n_folds}-Fold Cross-Validated Hyperparameter Optimization (Awareness Fix)")
+logging.info(f"# Data: {args.data}, Task: {args.task}, Subjects: {N_SUBJECTS}")
 
-# Load train data for comparison
-fc_train = np.load(f'FC_DATA/fc_{args.data}.npy')
-fc_train_tensor = torch.tensor(fc_train, dtype=torch.float32)
+# Initialize accuracy matrix for heatmap
+accuracy_matrix = np.zeros((20, 20))
 
+print(f"Running {n_folds}-Fold CV hyperparameter optimization (awareness.txt fix)")
+print(f"Data: {args.data}, Task: {args.task}, Subjects: {N_SUBJECTS}")
 
-# Correlation analysis function
-def calculate_correlation(fc_task_data, fc_train_data):
-    return np.corrcoef(fc_task_data.view(N_SUBJECTS, -1).numpy(), fc_train_data.view(N_SUBJECTS, -1).numpy(), rowvar=True)[:N_SUBJECTS, N_SUBJECTS:]
-
-# Initialize arrays for storing accuracies
-accuracy_matrix = np.zeros((20, 20))  # Buffer size
-
-# Loop over K and L, apply SDL, and compute accuracies
+# Loop over K and L
 for K in range(2, 17, 2):
     for L in range(2, K + 1, 2):
-        # Apply SDL
         print(f'K= {K}, L = {L}')
-        Y = np.zeros((int(N_PARCELS * (N_PARCELS - 1) / 2), N_SUBJECTS))
-        for i in range(N_SUBJECTS):
-            Y[:, i] = fc_task_residual[i][np.tril_indices(fc_task_residual[i].shape[0], k=-1)]
+        
+        fold_accuracies = []
+        
+        for fold in range(n_folds):
+            start_idx = fold * fold_size
+            end_idx = N_SUBJECTS if fold == n_folds - 1 else (fold + 1) * fold_size
+            test_idx = indices[start_idx:end_idx]
+            train_idx = np.setdiff1d(indices, test_idx)
+            
+            n_train = len(train_idx)
+            n_test = len(test_idx)
+            
+            # --- TRAIN ConvAE on train subjects only ---
+            train_rest = fc_train_data[train_idx]
+            train_tensor = torch.tensor(train_rest[:, np.newaxis, :, :], dtype=torch.float32)
+            
+            model = ConvAutoencoder().to(DEVICE)
+            optimizer = optim.Adam(model.parameters(), lr=0.001)
+            loader = DataLoader(TensorDataset(train_tensor, train_tensor), batch_size=16, shuffle=True)
+            
+            model.train()
+            for epoch in range(20):
+                for batch, _ in loader:
+                    batch = batch.to(DEVICE)
+                    optimizer.zero_grad()
+                    loss = nn.MSELoss()(model(batch), batch)
+                    loss.backward()
+                    optimizer.step()
+            
+            # --- Compute residuals on TEST subjects ---
+            model.eval()
+            test_task = fc_task[test_idx]
+            test_task_tensor = torch.tensor(test_task[:, np.newaxis, :, :], dtype=torch.float32).to(DEVICE)
+            
+            with torch.no_grad():
+                test_reconstr = model(test_task_tensor).cpu().squeeze(1).numpy()
+            test_residual = test_task - test_reconstr
+            
+            # --- SDL: Learn dictionary from TRAIN residuals, apply to TEST ---
+            train_task = fc_task[train_idx]
+            train_task_tensor = torch.tensor(train_task[:, np.newaxis, :, :], dtype=torch.float32).to(DEVICE)
+            with torch.no_grad():
+                train_reconstr = model(train_task_tensor).cpu().squeeze(1).numpy()
+            train_residual = train_task - train_reconstr
+            
+            n_tri = int(N_PARCELS * (N_PARCELS - 1) / 2)
+            tril_idx = np.tril_indices(N_PARCELS, k=-1)
+            
+            Y_train = np.zeros((n_tri, n_train))
+            for i in range(n_train):
+                Y_train[:, i] = train_residual[i][tril_idx]
+            
+            D_train, _ = k_svd(Y_train, K, L, n_iter=10, verbose=False, random_state=42)
+            
+            Y_test = np.zeros((n_tri, n_test))
+            for i in range(n_test):
+                Y_test[:, i] = test_residual[i][tril_idx]
+            
+            X_test = omp_sparse_coding(Y_test, D_train, L)
+            sdl_retr = np.dot(D_train, X_test).T
+            
+            DX_test = np.zeros((n_test, N_PARCELS, N_PARCELS))
+            for i in range(n_test):
+                DX_test[i] = reconstruct_symmetric_matrix(sdl_retr[i])
+            
+            test_refined = test_residual - DX_test
+            
+            # --- Accuracy on HELD-OUT subjects ---
+            test_rest = fc_train_data[test_idx]
+            corr = np.corrcoef(
+                test_refined.reshape(n_test, -1),
+                test_rest.reshape(n_test, -1)
+            )[:n_test, n_test:]
+            fold_accuracies.append(calculate_accuracy(corr))
+        
+        # Average accuracy across folds
+        mean_acc = np.mean(fold_accuracies) * 100
+        std_acc = np.std(fold_accuracies) * 100
+        print(f'  CV Accuracy: {mean_acc:.2f}% ± {std_acc:.2f}%')
+        
+        logging.info(f'K= {K}, L = {L} {mean_acc:.2f} ± {std_acc:.2f}')
+        accuracy_matrix[K - 2, L - 2] = mean_acc
 
-        D, X = k_svd(Y, K, L)
-        sdl_retr = np.dot(D, X).transpose()
-        DX = np.zeros((N_SUBJECTS, N_PARCELS, N_PARCELS))
-
-        for i in range(N_SUBJECTS):
-            DX[i, :, :] = reconstruct_symmetric_matrix(sdl_retr[i, :])
-
-        fc_task_refined = fc_task_residual - DX
-
-        # Correlation analysis between task and rest FC after SDL
-        corr_task_rest_after_sdl = calculate_correlation(fc_task_refined, fc_train_tensor)
-
-        # Calculate accuracy after SDL
-        accuracy_after_sdl = calculate_accuracy(corr_task_rest_after_sdl) * 100  # Convert to percentage
-        print(accuracy_after_sdl)
-
-        # Log the accuracy in the specified format
-        logging.info(f'K= {K}, L = {L} {accuracy_after_sdl}')
-
-        # Store the accuracy in the matrix
-        accuracy_matrix[K - 2, L - 2] = accuracy_after_sdl
+print(f"\nOptimization complete. Results saved to {log_file}")

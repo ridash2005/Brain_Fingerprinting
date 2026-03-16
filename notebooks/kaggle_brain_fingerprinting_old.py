@@ -1,3 +1,4 @@
+
 # %% [markdown]
 # # Brain Fingerprinting: Complete Analysis Pipeline for IEEE TCDS Manuscript
 # 
@@ -37,7 +38,6 @@ from sklearn.linear_model import orthogonal_mp
 import datetime
 import json
 import shutil
-import pandas as pd
 from tqdm.auto import tqdm
 
 # Aesthetics
@@ -117,32 +117,6 @@ def setup_environment():
 # Run environment setup
 setup_environment()
 
-def generate_synthetic_fc(num_subjects, n_parcels=360):
-    """Generate synthetic functional connectivity matrices."""
-    print(f">>> [SYNTHETIC] Generating {num_subjects} synthetic subjects...")
-    # Create a base connectivity pattern
-    base_pattern = np.random.rand(n_parcels, n_parcels)
-    base_pattern = (base_pattern + base_pattern.T) / 2
-    
-    fc_data = []
-    for i in range(num_subjects):
-        # Subject-specific variation
-        subject_variation = np.random.normal(0, 0.1, (n_parcels, n_parcels))
-        subject_variation = (subject_variation + subject_variation.T) / 2
-        
-        # Add a "fingerprint"
-        fingerprint = np.zeros((n_parcels, n_parcels))
-        idx = i % n_parcels
-        fingerprint[idx, :] = 1.0
-        fingerprint[:, idx] = 1.0
-        
-        fc = base_pattern + subject_variation + 0.5 * fingerprint
-        fc = np.clip(fc, -1.0, 1.0)
-        np.fill_diagonal(fc, 1.0)
-        fc_data.append(fc)
-        
-    return np.array(fc_data)
-
 # Constants
 BOLD_NAMES = [
     "rfMRI_REST1_LR", "rfMRI_REST1_RL", "rfMRI_REST2_LR", "rfMRI_REST2_RL",
@@ -205,9 +179,9 @@ class ConvAutoencoder(nn.Module):
     Convolutional Autoencoder for learning shared FC patterns.
     
     Architecture:
-    - Encoder: Conv2d(1, 16) + ReLU + MaxPool -> Conv2d(16, 32) + ReLU + MaxPool -> Conv2d(32, 64) + ReLU + MaxPool
-    - Latent: 64 x 45 x 45 = 129,600 dimensions
-    - Decoder: ConvTranspose2d(64, 32) + ReLU -> ConvTranspose2d(32, 16) + ReLU -> ConvTranspose2d(16, 1) + Tanh
+    - Encoder: Conv2d(1→16) + ReLU + MaxPool → Conv2d(16→32) + ReLU + MaxPool → Conv2d(32→64) + ReLU + MaxPool
+    - Latent: 64 × 45 × 45 = 129,600 dimensions
+    - Decoder: ConvTranspose2d(64→32) + ReLU → ConvTranspose2d(32→16) + ReLU → ConvTranspose2d(16→1) + Tanh
     
     Training: MSE loss, Adam optimizer (lr=0.001), 20 epochs, batch_size=16
     """
@@ -325,37 +299,34 @@ def perform_grid_search(Y, rest_flat, n_subjects, n_parcels, K_range=(2, 16), L_
     best_K = 15  # Default fallback
     best_L = 12
     
-    all_L_vals = sorted(list(set([L for K_val in Ks for L in range(2, K_val + 1, 2)])))
-    accuracies = np.zeros((len(Ks), len(all_L_vals)))
+    accuracies = np.zeros((len(Ks), len(Ks)))  # Rough placeholder size
     
-    # Check if data exists, if not generate synthetic for local grid search
-    if Y is None or (isinstance(Y, np.ndarray) and Y.size == 0):
-        print(">>> [!] Data missing for grid search proxy. Using synthetic proxy.")
-        temp_num_subs = 20
-        fc_r = generate_synthetic_fc(temp_num_subs, 360)
-        fc_t = 0.8 * fc_r + 0.2 * generate_synthetic_fc(temp_num_subs, 360)
-        fc_t = np.clip(fc_t, -1.0, 1.0)
-        
-        tril = np.tril_indices(360, k=-1)
-        rest_flat = np.array([fc_r[i][tril] for i in range(temp_num_subs)]).T
-        Y = np.array([fc_t[i][tril] for i in range(temp_num_subs)]).T
-        n_subjects = temp_num_subs
-    
+    # We will just track the best directly
     for i, K in enumerate(Ks):
         L_vals = range(2, K + 1, 2)
-        for L in L_vals:
-            j = all_L_vals.index(L)
+        for j, L in enumerate(L_vals):
             # Run simplified K-SVD
             D, X = k_svd(Y, K, L, n_iter=n_iter, verbose=False, random_state=42)
             
+            # Reconstruct and compute accuracy
+            # Note: Y passed here is usually task residuals or similar
+            # For quick grid search we might need a proper eval metric
+            # Converting sparse codes to accuracy requires a reference (rest_flat)
+            
+            # Simple proxy: reconstruction quality or stability? 
+            # Real grid search needs task vs rest matching.
+            
+            # Assuming Y is Task data for grid search context:
+            # We need to project Rest data too to calculate accuracy
+            # This logic inside perform_grid_search usually requires Rest data
+            
             if rest_flat is not None:
                 # Approximate Rest Sparse Codes using learned D
+                # rest_flat is already (n_features, n_subjects)
                 X_rest = omp_sparse_coding(rest_flat, D, L)
                 
                 corr = np.corrcoef(X.T, X_rest.T)[:n_subjects, n_subjects:]
                 acc = calculate_accuracy(corr)
-                
-                accuracies[i, j] = acc
                 
                 if acc > best_acc:
                     best_acc = acc
@@ -363,28 +334,31 @@ def perform_grid_search(Y, rest_flat, n_subjects, n_parcels, K_range=(2, 16), L_
                     best_L = L
                 
                 print(f"    K={K}, L={L} -> Acc={acc:.4f}")
+            else:
+                # If no rest data provided, just maximize sparsity/recon trade-off? 
+                # Or just print.
+                pass
 
     print(f"  Found Optimal: K={best_K}, L={best_L} (Acc: {best_acc:.4f})")
     
     # Plot Heatmap
+    # Plot Heatmap
     if np.nanmax(accuracies) > 0:
         try:
-            plt.figure(figsize=(12, 10))
-            # Mask zeros (invalid combinations)
+            plt.figure(figsize=(10, 8))
+            # Mask zeros (invalid combinations where L > K)
             mask = accuracies == 0
-            df_plot = pd.DataFrame(accuracies, index=Ks, columns=all_L_vals)
-            sns.heatmap(df_plot, annot=True, fmt='.2f', cmap='YlGnBu', mask=mask)
-            plt.title(f'Grid Search Identification Accuracy ({task_name.upper()})')
-            plt.ylabel('Dictionary Atoms (K)')
-            plt.xlabel('Sparsity Level (L)')
+            sns.heatmap(accuracies, annot=True, fmt='.2f', cmap='viridis', 
+                       xticklabels=Ks, yticklabels=Ks, mask=mask)
+            plt.title(f'Grid Search Accuracy ({task_name})')
+            plt.ylabel('Atoms (K)')
+            plt.xlabel('Sparsity (L)')
             
             # Save locally
             os.makedirs(OUTPUT_DIR, exist_ok=True)
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            plot_path = os.path.join(OUTPUT_DIR, f"grid_search_{task_name}_{timestamp}.png")
-            plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+            plt.savefig(os.path.join(OUTPUT_DIR, f"grid_search_{task_name}_{timestamp}.png"))
             plt.close()
-            print(f"  [OK] Grid search heatmap saved to {plot_path}")
         except Exception as e:
             print(f"Warning: Could not plot heatmap: {e}")
     else:
@@ -575,18 +549,7 @@ def paired_t_test(metrics1, metrics2):
 
 # %%
 def run_ablation_study(fc_task, fc_rest, model=None, K=15, L=12):
-    """
-    Run complete ablation study with K-Fold CV for ConvAE-based methods.
-    
-    Awareness Fix: Ablations 4-6 (which use a learned ConvAE) now use 5-Fold CV
-    to prevent identifiability leakage. The ConvAE is trained per fold on train 
-    subjects only and evaluated on held-out test subjects. Ablations 1-3 (no 
-    learned model) are not affected by double-dipping.
-    """
-    # Sanitize inputs
-    fc_task = np.clip(np.nan_to_num(fc_task, nan=0.0, posinf=1.0, neginf=-1.0), -1.0, 1.0)
-    fc_rest = np.clip(np.nan_to_num(fc_rest, nan=0.0, posinf=1.0, neginf=-1.0), -1.0, 1.0)
-    
+    """Run complete ablation study."""
     n_subjects = fc_task.shape[0]
     n_parcels = fc_task.shape[1]
     results = {}
@@ -603,150 +566,72 @@ def run_ablation_study(fc_task, fc_rest, model=None, K=15, L=12):
         corr = np.corrcoef(task_flat, rest_flat)[:n_subjects, n_subjects:]
         return corr, compute_all_metrics(corr)
     
-    # 1. Raw FC baseline (Finn et al.) - No learned model, no leakage
+    # 1. Raw FC baseline (Finn et al.)
     print("  Ablation 1: Raw FC baseline...")
     corr, metrics = get_corr_and_metrics(fc_task)
-    results['Raw FC'] = {'metrics': metrics, 'corr_matrix': corr}
+    results['raw_fc'] = {'metrics': metrics, 'corr_matrix': corr}
     
-    # 2. Group average subtraction - No learned model, no leakage
+    # 2. Group average subtraction
     print("  Ablation 2: Group average subtraction...")
     group_avg = np.mean(fc_task, axis=0, keepdims=True)
     fc_group_sub = fc_task - group_avg
     corr, metrics = get_corr_and_metrics(fc_group_sub)
-    results['Group Average'] = {'metrics': metrics, 'corr_matrix': corr}
+    results['group_avg'] = {'metrics': metrics, 'corr_matrix': corr}
     
-    # 3. SDL only (on raw FC) - No learned model, no leakage
+    # 3. SDL only (on raw FC)
     print("  Ablation 3: SDL only...")
     n_tri = int(n_parcels * (n_parcels - 1) / 2)
     tril_idx = np.tril_indices(n_parcels, k=-1)
     Y_raw = np.zeros((n_tri, n_subjects))
-    for i in tqdm(range(n_subjects), desc="  Vectorizing Raw FC"):
+    for i in range(n_subjects):
         Y_raw[:, i] = fc_task[i][tril_idx]
     
     D_raw, X_raw = k_svd(Y_raw, K, L, n_iter=5, verbose=False, random_state=42)
     sdl_raw = np.dot(D_raw, X_raw).T
     fc_sdl_only = np.zeros_like(fc_task)
-    for i in tqdm(range(n_subjects), desc="  Reconstructing FC"):
+    for i in range(n_subjects):
         fc_sdl_only[i] = reconstruct_symmetric_matrix(sdl_raw[i], n_parcels)
     corr, metrics = get_corr_and_metrics(fc_sdl_only)
-    results['SDL Only'] = {'metrics': metrics, 'corr_matrix': corr}
+    results['sdl_only'] = {'metrics': metrics, 'corr_matrix': corr}
     
-    # === ABLATIONS 4-6: K-Fold CV to prevent double-dipping (Awareness Fix) ===
-    # ConvAE is trained per fold on train subjects only
     if model is not None:
-        print("  Ablations 4-6: ConvAE-based (using 5-Fold CV to prevent leakage)...")
+        # 4. ConvAE latent features
+        print("  Ablation 4: ConvAE latent features...")
+        model.eval()
+        fc_tensor = torch.tensor(fc_task[:, np.newaxis, :, :], dtype=torch.float32).to(DEVICE)
+        fc_rest_tensor = torch.tensor(fc_rest[:, np.newaxis, :, :], dtype=torch.float32).to(DEVICE)
         
-        n_folds = 5
-        cv_indices = np.random.RandomState(42).permutation(n_subjects)
-        fold_size = n_subjects // n_folds
+        with torch.no_grad():
+            latent_task = model.encoder(fc_tensor).view(n_subjects, -1).cpu().numpy()
+            latent_rest = model.encoder(fc_rest_tensor).view(n_subjects, -1).cpu().numpy()
         
-        # Out-of-fold arrays for aggregation
-        latent_task_all = np.zeros((n_subjects, 1))  # placeholder, will resize
-        latent_rest_all = np.zeros((n_subjects, 1))
-        residuals_all = np.zeros_like(fc_task)
-        refined_all = np.zeros_like(fc_task)
-        latent_initialized = False
-        
-        # Store dictionary from the last fold for interpretability
-        last_D = None
-        last_X = None
-        
-        for fold in tqdm(range(n_folds), desc="ConvAE CV Folds"):
-            start = fold * fold_size
-            end = n_subjects if fold == n_folds - 1 else (fold + 1) * fold_size
-            test_idx = cv_indices[start:end]
-            train_idx = np.setdiff1d(cv_indices, test_idx)
-            n_train = len(train_idx)
-            n_test = len(test_idx)
-            
-            # Train fresh ConvAE on REST data of TRAIN subjects only
-            train_rest = fc_rest[train_idx]
-            train_tensor = torch.tensor(train_rest[:, np.newaxis, :, :], dtype=torch.float32)
-            
-            fold_model = ConvAutoencoder(n_parcels).to(DEVICE)
-            fold_optimizer = optim.Adam(fold_model.parameters(), lr=0.001)
-            fold_loader = DataLoader(TensorDataset(train_tensor, train_tensor), batch_size=16, shuffle=True)
-            
-            fold_model.train()
-            for _ in tqdm(range(20), desc=f"  Fold {fold+1} Training", leave=False):
-                for batch, _ in fold_loader:
-                    batch = batch.to(DEVICE)
-                    fold_optimizer.zero_grad()
-                    loss = nn.MSELoss()(fold_model(batch), batch)
-                    loss.backward()
-                    torch.nn.utils.clip_grad_norm_(fold_model.parameters(), max_norm=5.0)
-                    fold_optimizer.step()
-            
-            fold_model.eval()
-            
-            n_train = len(train_idx)
-            n_test = len(test_idx)
-            
-            # Compute latent, residuals, and refined for TEST subjects
-            test_task_tensor = torch.tensor(fc_task[test_idx, np.newaxis, :, :], dtype=torch.float32).to(DEVICE)
-            test_rest_tensor = torch.tensor(fc_rest[test_idx, np.newaxis, :, :], dtype=torch.float32).to(DEVICE)
-            
-            with torch.no_grad():
-                lt = fold_model.encoder(test_task_tensor).reshape(n_test, -1).cpu().numpy()
-                lr = fold_model.encoder(test_rest_tensor).reshape(n_test, -1).cpu().numpy()
-                recon = fold_model(test_task_tensor).cpu().numpy().reshape(n_test, n_parcels, n_parcels)
-            
-            # Initialize latent arrays on first fold (need to know dim)
-            if not latent_initialized:
-                latent_dim = lt.shape[1]
-                latent_task_all = np.zeros((n_subjects, latent_dim))
-                latent_rest_all = np.zeros((n_subjects, latent_dim))
-                latent_initialized = True
-            
-            for i, idx in enumerate(test_idx):
-                latent_task_all[idx] = lt[i]
-                latent_rest_all[idx] = lr[i]
-                residuals_all[idx] = fc_task[idx] - recon[i]
-            
-            # SDL: Learn dictionary from TRAIN residuals, apply to TEST
-            train_task_tensor = torch.tensor(fc_task[train_idx, np.newaxis, :, :], dtype=torch.float32).to(DEVICE)
-            with torch.no_grad():
-                train_recon = fold_model(train_task_tensor).cpu().numpy().reshape(n_train, n_parcels, n_parcels)
-            train_residuals = fc_task[train_idx] - train_recon
-            
-            Y_train = np.zeros((n_tri, n_train))
-            for i in tqdm(range(n_train), desc=f"  Fold {fold+1} Train SDL Setup", leave=False):
-                Y_train[:, i] = train_residuals[i][tril_idx]
-            
-            Y_train = np.nan_to_num(Y_train, nan=0.0)
-            D_train, _ = k_svd(Y_train, K, L, n_iter=5, verbose=False, random_state=42)
-            
-            test_residuals = np.array([residuals_all[idx] for idx in test_idx])
-            Y_test = np.zeros((n_tri, n_test))
-            for i in tqdm(range(n_test), desc=f"  Fold {fold+1} Test SDL Setup", leave=False):
-                Y_test[:, i] = test_residuals[i][tril_idx]
-            
-            Y_test = np.nan_to_num(Y_test, nan=0.0)
-            X_test = omp_sparse_coding(Y_test, D_train, L)
-            sdl_retr = np.dot(D_train, X_test).T
-            
-            for i, idx in tqdm(enumerate(test_idx), desc=f"  Fold {fold+1} Recon", total=n_test, leave=False):
-                refined_all[idx] = residuals_all[idx] - reconstruct_symmetric_matrix(sdl_retr[i], n_parcels)
-            
-            last_D = D_train
-            last_X = X_test
-        
-        # Ablation 4: ConvAE latent features (aggregated out-of-fold)
-        print("  Ablation 4: ConvAE latent features (CV-aggregated)...")
-        corr = np.corrcoef(latent_task_all, latent_rest_all)[:n_subjects, n_subjects:]
+        corr = np.corrcoef(latent_task, latent_rest)[:n_subjects, n_subjects:]
         metrics = compute_all_metrics(corr)
-        results['ConvAE Latent'] = {'metrics': metrics, 'corr_matrix': corr}
+        results['convae_latent'] = {'metrics': metrics, 'corr_matrix': corr}
         
-        # Ablation 5: ConvAE residuals only (aggregated out-of-fold)
-        print("  Ablation 5: ConvAE residuals only (CV-aggregated)...")
-        corr, metrics = get_corr_and_metrics(residuals_all)
-        results['ConvAE Only'] = {'metrics': metrics, 'corr_matrix': corr}
+        # 5. ConvAE residuals only
+        print("  Ablation 5: ConvAE residuals only...")
+        with torch.no_grad():
+            reconstructed = model(fc_tensor).cpu().numpy().squeeze()
+        residuals = fc_task - reconstructed
+        corr, metrics = get_corr_and_metrics(residuals)
+        results['convae_residuals'] = {'metrics': metrics, 'corr_matrix': corr}
         
-        # Ablation 6: Full pipeline ConvAE + SDL (aggregated out-of-fold)
-        print("  Ablation 6: ConvAE + SDL full pipeline (CV-aggregated)...")
-        corr, metrics = get_corr_and_metrics(refined_all)
-        results['Full Pipeline'] = {'metrics': metrics, 'corr_matrix': corr, 
-                                  'dictionary': last_D, 'sparse_codes': last_X}
+        # 6. Full pipeline (ConvAE + SDL)
+        print("  Ablation 6: ConvAE + SDL (full pipeline)...")
+        Y_resid = np.zeros((n_tri, n_subjects))
+        for i in range(n_subjects):
+            Y_resid[:, i] = residuals[i][tril_idx]
+        
+        D_full, X_full = k_svd(Y_resid, K, L, n_iter=5, verbose=False, random_state=42)
+        sdl_full = np.dot(D_full, X_full).T
+        fc_refined = np.zeros_like(fc_task)
+        for i in range(n_subjects):
+            fc_refined[i] = residuals[i] - reconstruct_symmetric_matrix(sdl_full[i], n_parcels)
+        
+        corr, metrics = get_corr_and_metrics(fc_refined)
+        results['convae_sdl'] = {'metrics': metrics, 'corr_matrix': corr, 
+                                  'dictionary': D_full, 'sparse_codes': X_full}
     
     return results
 
@@ -846,9 +731,7 @@ def sample_size_robustness(fc_task, fc_rest, fractions=[0.2, 0.4, 0.6, 0.8, 1.0]
     results = {}
     
     for frac in fractions:
-        n_sample = int(n_subjects * frac)
-        if n_sample < 2: n_sample = 2
-        if n_sample > n_subjects: n_sample = n_subjects
+        n_sample = max(10, int(n_subjects * frac))
         accs = []
         for _ in range(n_repeats):
             idx = np.random.choice(n_subjects, n_sample, replace=False)
@@ -900,23 +783,22 @@ def cross_validation(fc_task, fc_rest, n_folds=5, K=15, L=12, epochs=10):
         
         # Test on held-out fold
         model.eval()
-        n_train = len(train_idx)
-        n_test = len(test_idx)
         test_tensor = torch.tensor(fc_task[test_idx, np.newaxis, :, :], dtype=torch.float32).to(DEVICE)
         
         with torch.no_grad():
-            residuals_test = (test_tensor - model(test_tensor)).cpu().numpy().reshape(n_test, n_parcels, n_parcels)
+            residuals_test = (test_tensor - model(test_tensor)).cpu().numpy().squeeze()
             
         # --- Strict Inductive SDL ---
         # 1. Compute Train Residuals to learn Dictionary
         with torch.no_grad():
-            train_recon = model(train_tensor.to(DEVICE)).cpu().numpy().reshape(n_train, n_parcels, n_parcels)
+            train_recon = model(train_tensor.to(DEVICE)).cpu().numpy().squeeze()
         residuals_train = fc_task[train_idx] - train_recon
 
         n_tri = int(n_parcels * (n_parcels - 1) / 2)
         tril_idx = np.tril_indices(n_parcels, k=-1)
         
         # Prepare Train Data for KSVD
+        n_train = len(train_idx)
         Y_train = np.zeros((n_tri, n_train))
         for i in range(n_train):
             Y_train[:, i] = residuals_train[i][tril_idx]
@@ -925,6 +807,7 @@ def cross_validation(fc_task, fc_rest, n_folds=5, K=15, L=12, epochs=10):
         D_train, _ = k_svd(Y_train, K, L, n_iter=5, verbose=False, random_state=42)
         
         # 2. Apply to TEST (Sparse Coding only)
+        n_test = len(test_idx)
         Y_test = np.zeros((n_tri, n_test))
         for i in range(n_test):
             Y_test[:, i] = residuals_test[i][tril_idx]
@@ -958,13 +841,10 @@ def cross_validation(fc_task, fc_rest, n_folds=5, K=15, L=12, epochs=10):
 # %%
 def plot_ablation_results(ablation_results, save_path):
     """Plot ablation study results."""
-    # Sort for consistent display
-    order = ['Raw FC', 'Group Average', 'SDL Only', 'ConvAE Latent', 'ConvAE Only', 'Full Pipeline']
-    methods = [m for m in order if m in methods]
-    
+    methods = list(ablation_results.keys())
     accuracies = [ablation_results[m]['metrics']['top_1_accuracy'] for m in methods]
     
-    colors = ['#95a5a6' if m == 'Raw FC' else '#2ecc71' if m == 'Full Pipeline' else '#3498db' 
+    colors = ['firebrick' if m == 'raw_fc' else 'forestgreen' if m == 'convae_sdl' else 'steelblue' 
               for m in methods]
     
     fig, ax = plt.subplots(figsize=(12, 6))
@@ -994,7 +874,7 @@ def plot_robustness(noise_results, sample_results, save_path):
     means = [noise_results[n]['mean'] for n in noise_levels]
     stds = [noise_results[n]['std'] for n in noise_levels]
     ax1.errorbar(noise_levels, means, yerr=stds, marker='o', capsize=5, linewidth=2)
-    ax1.set_xlabel('Noise Level (std)', fontsize=12)
+    ax1.set_xlabel('Noise Level (σ)', fontsize=12)
     ax1.set_ylabel('Accuracy', fontsize=12)
     ax1.set_title('Noise Robustness', fontsize=14)
     ax1.grid(True, alpha=0.3)
@@ -1113,12 +993,9 @@ def generate_manuscript_report(all_results, output_dir):
         f.write("-" * 50 + "\n")
         f.write(f"{'Method':<25} {'Acc':<10} {'Top-5':<10} {'MRR':<10}\n")
         f.write("-" * 50 + "\n")
-        order = ['Raw FC', 'Group Average', 'SDL Only', 'ConvAE Latent', 'ConvAE Only', 'Full Pipeline']
-        for method in order:
-            if method in all_results['ablation']:
-                data = all_results['ablation'][method]
-                m = data['metrics']
-                f.write(f"{method:<25} {m['top_1_accuracy']:.4f}    {m['top_5_accuracy']:.4f}    {m['mrr']:.4f}\n")
+        for method, data in all_results['ablation'].items():
+            m = data['metrics']
+            f.write(f"{method:<25} {m['top_1_accuracy']:.4f}    {m['top_5_accuracy']:.4f}    {m['mrr']:.4f}\n")
         f.write("\n")
         
         # SOTA Comparison
@@ -1154,8 +1031,8 @@ def generate_manuscript_report(all_results, output_dir):
         # Comprehensive Metrics
         f.write("6. COMPREHENSIVE METRICS (Proposed Method)\n")
         f.write("-" * 50 + "\n")
-        if 'Full Pipeline' in all_results['ablation']:
-            m = all_results['ablation']['Full Pipeline']['metrics']
+        if 'convae_sdl' in all_results['ablation']:
+            m = all_results['ablation']['convae_sdl']['metrics']
             f.write(f"Top-1 Accuracy: {m['top_1_accuracy']:.4f}\n")
             f.write(f"Top-3 Accuracy: {m['top_3_accuracy']:.4f}\n")
             f.write(f"Top-5 Accuracy: {m['top_5_accuracy']:.4f}\n")
@@ -1181,8 +1058,8 @@ def generate_manuscript_report(all_results, output_dir):
         f.write("8. MODEL ARCHITECTURE DETAILS\n")
         f.write("-" * 50 + "\n")
         f.write("ConvAutoencoder:\n")
-        f.write("  Encoder: Conv2d(1, 16, 32, 64) + BatchNorm + ReLU + MaxPool\n")
-        f.write("  Decoder: ConvTranspose2d(64, 32, 16, 1) + BatchNorm + ReLU + Tanh\n")
+        f.write("  Encoder: Conv2d(1→16→32→64) + BatchNorm + ReLU + MaxPool\n")
+        f.write("  Decoder: ConvTranspose2d(64→32→16→1) + BatchNorm + ReLU + Tanh\n")
         f.write(f"  Parameters: {all_results['model_params']:,}\n")
         f.write("  Training: MSE Loss, Adam (lr=0.001), 20 epochs\n\n")
         f.write("Sparse Dictionary Learning (K-SVD):\n")
@@ -1281,23 +1158,33 @@ def run_complete_analysis(n_subjects=100, task="motor", use_synthetic=True, n_fo
     
     print(f"  Loaded {n_subjects} subjects, {n_parcels} parcels")
     
-    # ===== PHASE 2: CONVAE SETUP (CV-based training happens inside ablation) =====
-    print("\n[2/9] ConvAutoencoder Setup (CV-based training in ablation to prevent leakage)...")
+    # ===== PHASE 2: TRAIN CONVAE =====
+    print("\n[2/9] Training ConvAutoencoder...")
     model = ConvAutoencoder(n_parcels).to(DEVICE)
     all_results['model_params'] = model.count_parameters()
-    # NOTE: We no longer train a single model on ALL subjects here.
-    # The ablation study (Phase 3) trains fresh models per CV fold to prevent
-    # the identifiability inflation described in awareness.txt (Orlichenko et al.)
     
-    # ===== PHASE 3: ABLATION STUDIES (with internal CV) =====
-    print("\n[3/9] Running ablation studies (with 5-Fold CV for ConvAE methods)...")
+    rest_tensor = torch.tensor(fc_rest[:, np.newaxis, :, :], dtype=torch.float32)
+    loader = DataLoader(TensorDataset(rest_tensor, rest_tensor), batch_size=16, shuffle=True)
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    
+    model.train()
+    for epoch in tqdm(range(20), desc="Training"):
+        for batch, _ in loader:
+            batch = batch.to(DEVICE)
+            optimizer.zero_grad()
+            loss = nn.MSELoss()(model(batch), batch)
+            loss.backward()
+            optimizer.step()
+    
+    # ===== PHASE 3: ABLATION STUDIES =====
+    print("\n[3/9] Running ablation studies...")
     ablation = run_ablation_study(fc_task, fc_rest, model, K, L)
     all_results['ablation'] = ablation
     plot_ablation_results(ablation, os.path.join(run_dir, "ablation_results.png"))
     
     # ===== PHASE 4: SOTA COMPARISON =====
     print("\n[4/9] Running SOTA comparisons...")
-    proposed_acc = ablation['Full Pipeline']['metrics']['top_1_accuracy']
+    proposed_acc = ablation['convae_sdl']['metrics']['top_1_accuracy']
     sota = run_sota_comparison(fc_task, fc_rest, proposed_acc)
     all_results['sota'] = sota
     
@@ -1309,8 +1196,8 @@ def run_complete_analysis(n_subjects=100, task="motor", use_synthetic=True, n_fo
         if 'corr_matrix' in data:
             plot_full_correlation_matrix(data['corr_matrix'], os.path.join(run_dir, f"heatmap_{key}.png"))
 
-    if 'Full Pipeline' in ablation:
-        fc_refined = ablation['Full Pipeline']['corr_matrix']
+    if 'convae_sdl' in ablation:
+        fc_refined = ablation['convae_sdl']['corr_matrix']
         
         # Bootstrap
         bootstrap = bootstrap_ci(fc_task, fc_rest, n_bootstrap=500)
@@ -1322,8 +1209,8 @@ def run_complete_analysis(n_subjects=100, task="motor", use_synthetic=True, n_fo
         all_results['permutation_p'] = p_val
         
         # McNemar's test
-        preds_model = np.argmax(ablation['Full Pipeline']['corr_matrix'], axis=1) == np.arange(n_subjects)
-        preds_baseline = np.argmax(ablation['Raw FC']['corr_matrix'], axis=1) == np.arange(n_subjects)
+        preds_model = np.argmax(ablation['convae_sdl']['corr_matrix'], axis=1) == np.arange(n_subjects)
+        preds_baseline = np.argmax(ablation['raw_fc']['corr_matrix'], axis=1) == np.arange(n_subjects)
         mcnemar_stat, mcnemar_p = mcnemar_test(preds_model, preds_baseline)
         all_results['mcnemar_p'] = mcnemar_p
         
@@ -1335,7 +1222,7 @@ def run_complete_analysis(n_subjects=100, task="motor", use_synthetic=True, n_fo
         plot_similarity_distributions(fc_refined, os.path.join(run_dir, "similarity_dist.png"))
         
         # Full Correlation Matrix
-        plot_full_correlation_matrix(ablation['Raw FC']['corr_matrix'], os.path.join(run_dir, "full_correlation_matrix.png"))
+        plot_full_correlation_matrix(ablation['raw_fc']['corr_matrix'], os.path.join(run_dir, "full_correlation_matrix.png"))
     
     # ===== PHASE 6: CROSS-VALIDATION =====
     print("\n[6/9] Running cross-validation...")
@@ -1344,10 +1231,10 @@ def run_complete_analysis(n_subjects=100, task="motor", use_synthetic=True, n_fo
     
     # ===== PHASE 7: INTERPRETABILITY =====
     print("\n[7/9] Running interpretability analysis...")
-    if 'Full Pipeline' in ablation:
+    if 'convae_sdl' in ablation:
         plot_interpretability(
             model, 
-            ablation['Full Pipeline']['dictionary'], 
+            ablation['convae_sdl']['dictionary'], 
             n_parcels, 
             run_dir
         )
@@ -1380,7 +1267,7 @@ def run_complete_analysis(n_subjects=100, task="motor", use_synthetic=True, n_fo
     print("=" * 60)
     print(f"\nResults saved to: {run_dir}")
     print(f"\nKey Results:")
-    print(f"  Baseline Accuracy:  {ablation['Raw FC']['metrics']['top_1_accuracy']:.4f}")
+    print(f"  Baseline Accuracy:  {ablation['raw_fc']['metrics']['top_1_accuracy']:.4f}")
     print(f"  Proposed Accuracy:  {proposed_acc:.4f}")
     if 'permutation_p' in all_results:
         print(f"  P-value (vs Chance): {all_results['permutation_p']:.6f}")
@@ -1394,30 +1281,17 @@ def run_complete_analysis(n_subjects=100, task="motor", use_synthetic=True, n_fo
 
 # %%
 if __name__ == "__main__":
-    import argparse
-    
-    parser = argparse.ArgumentParser(description="Brain Fingerprinting Main Pipeline")
-    parser.add_argument("--task", type=str, default=None, help="Specific task to run (e.g. motor). If none, runs all available.")
-    parser.add_argument("--num_subjects", type=int, default=339, help="Number of subjects")
-    parser.add_argument("--K", type=int, default=None, help="Hardcoded dictionary atoms K (overrides default/tuned).")
-    parser.add_argument("--L", type=int, default=None, help="Hardcoded sparsity level L (overrides default/tuned).")
-    parser.add_argument("--search_dict", action="store_true", help="Perform automatic Grid Search for K and L")
-    args, unknown = parser.parse_known_args()
-
     # Configuration - USE REAL HCP DATA FOR COMPREHENSIVE ANALYSIS
     USE_SYNTHETIC = False
-    N_SUBJECTS = args.num_subjects
-    
+    N_SUBJECTS = 339       # Full HCP dataset
     # Full list of HCP tasks
-    ALL_TASKS = [args.task] if args.task else ["motor", "wm", "emotion", "gambling", "language", "relational", "social"]
+    ALL_TASKS = ["motor", "wm", "emotion", "gambling", "language", "relational", "social"]
     N_FOLDS = 5
     
     # ===== HYPERPARAMETER CONFIGURATION =====
-    # Change to True to run automatic Grid Search (slow, searches K and L)
-    # Change to False to use the manually tuned parameters below (fast)
-    ENABLE_GRID_SEARCH = False 
-    
-    PERFORM_GRID_SEARCH = args.search_dict or ENABLE_GRID_SEARCH
+    # Set to TRUE to run automatic Grid Search (slow)
+    # Set to FALSE to use the manually tuned parameters below (fast)
+    PERFORM_GRID_SEARCH = False
     
     # Manually Tuned Parameters (K, L) for each task
     # Replace (15, 12) with your specific values found from previous tuning runs
@@ -1435,25 +1309,13 @@ if __name__ == "__main__":
     all_run_dirs = []
     
     print(f"Starting Multi-Task Analysis for: {ALL_TASKS}")
-    print(f"USING DATASET (N={N_SUBJECTS}) - THIS WILL TAKE TIME")
+    print(f"USING FULL DATASET (N={N_SUBJECTS}) - THIS WILL TAKE TIME")
     print(f"Grid Search Enabled: {PERFORM_GRID_SEARCH}")
     if not PERFORM_GRID_SEARCH:
-        if args.K is not None and args.L is not None:
-             print("Using hardcoded parameters from command line arguments.")
-        else:
-             print("Using manually defined parameters from TUNED_PARAMS.")
+        print("Using manually defined parameters from TUNED_PARAMS.")
     
     # Filter tasks based on actual data availability
     AVAILABLE_TASKS = []
-    
-    # Check if data exists - Auto-switch to synthetic if not 
-    if not USE_SYNTHETIC and not (os.path.exists(os.path.join(FC_DATA_DIR, "fc_rest.npy")) or 
-                                (RAW_REST_DIR and os.path.exists(os.path.join(RAW_REST_DIR, "subjects")))):
-        print(">>> [!] Real data not found. Auto-switching to SYNTHETIC mode for local run.")
-        USE_SYNTHETIC = True
-        if N_SUBJECTS > 50:
-            print(f">>> [!] Reducing N_SUBJECTS from {N_SUBJECTS} to 50 for synthetic run.")
-            N_SUBJECTS = 50
     
     # Check Rest Data First
     HAS_REST = False
@@ -1532,8 +1394,8 @@ if __name__ == "__main__":
         
         try:
             # Step 0: Hyperparameters
-            # Default fallback (e.g. if grid search fails or data missing)
-            best_K, best_L = TUNED_PARAMS.get(task_name, (15, 12))
+            best_K = 2
+            best_L = 2
             
             if PERFORM_GRID_SEARCH:
                 print(f">>> Optimization: Running Grid Search for {task_name}...")
@@ -1620,18 +1482,13 @@ if __name__ == "__main__":
                     best_K = 15
                     best_L = 12
             else:
-                # MANUAL PARAMETERS OR ARGUMENTS
-                if args.K is not None and args.L is not None:
-                    print(f">>> Optimization: Using Hardcoded Command-Line Parameters for {task_name}...")
-                    best_K = args.K
-                    best_L = args.L
+                # MANUAL PARAMETERS
+                print(f">>> Optimization: Using Pre-Tuned Parameters for {task_name}...")
+                if task_name in TUNED_PARAMS:
+                    best_K, best_L = TUNED_PARAMS[task_name]
+                    print(f"    Found in TUNED_PARAMS: K={best_K}, L={best_L}")
                 else:
-                    print(f">>> Optimization: Using Pre-Tuned Parameters for {task_name}...")
-                    if task_name in TUNED_PARAMS:
-                        best_K, best_L = TUNED_PARAMS[task_name]
-                        print(f"    Found in TUNED_PARAMS: K={best_K}, L={best_L}")
-                    else:
-                        raise ValueError(f"CRITICAL ERROR: {task_name} not found in TUNED_PARAMS and Grid Search is disabled. Please add (K, L) for this task or enable Grid Search.")
+                    raise ValueError(f"CRITICAL ERROR: {task_name} not found in TUNED_PARAMS and Grid Search is disabled. Please add (K, L) for this task or enable Grid Search.")
             
             print(f">>> Final Hyperparameters: K={best_K}, L={best_L}")
 

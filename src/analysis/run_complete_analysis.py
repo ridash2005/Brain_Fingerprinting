@@ -21,7 +21,7 @@ import shutil
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
 # Import analysis modules
-from src.analysis.statistical_validation import comprehensive_statistical_report, permutation_test, bootstrap_confidence_interval
+from src.analysis.statistical_validation import comprehensive_statistical_report, permutation_test, bootstrap_ci
 from src.analysis.ablation_studies import run_all_ablations
 from src.analysis.cross_validation import CrossValidation
 from src.analysis.state_of_art_comparison import run_sota_comparison_pipeline
@@ -144,7 +144,7 @@ def main():
         r_flat = r.reshape(len(r), -1)
         return calculate_accuracy(np.corrcoef(t_flat, r_flat)[:len(t), len(t):])
         
-    boot_results = bootstrap_confidence_interval(fc_task, fc_rest, fingerprint_wrapper, n_bootstrap=50)
+    boot_results = bootstrap_ci(fc_task, fc_rest, n_bootstrap=50)
     
     comprehensive_statistical_report({
         'permutation': perm_results,
@@ -166,7 +166,7 @@ def main():
     # 3. Ablation Studies
     print("\n[3/8] Running ablation studies...")
     ablation_dir = os.path.join(output_base, '2_ablation_studies')
-    run_all_ablations(fc_task, fc_rest, cae_task, cae_rest, X_task_raw.T, X_rest_raw.T, X_task.T, X_rest.T, ablation_dir)
+    run_all_ablations(fc_task, fc_rest, ablation_dir)
     
     # 4. Cross-Validation
     print("\n[4/8] Performing cross-validation...")
