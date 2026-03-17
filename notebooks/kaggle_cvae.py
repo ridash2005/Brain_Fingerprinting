@@ -200,6 +200,24 @@ BOLD_NAMES = [
 ]
 TRIL_IDX = np.tril_indices(360, k=-1)
 
+# Updated states mapping for CVAE
+HCP_STATES = {
+    "rest": 0, "motor": 1, "wm": 2, "emotion": 3, 
+    "gambling": 4, "language": 5, "relational": 6, "social": 7
+}
+NUM_STATES = len(HCP_STATES)
+
+def vectorize_fc(fc_matrices):
+    """Vectorize a batch of FC matrices using lower triangle."""
+    n_subs = fc_matrices.shape[0]
+    n_parcels = fc_matrices.shape[1]
+    n_feat = (n_parcels * (n_parcels - 1)) // 2
+    tril = np.tril_indices(n_parcels, k=-1)
+    vectorized = np.zeros((n_subs, n_feat))
+    for i in range(n_subs):
+        vectorized[i] = fc_matrices[i][tril]
+    return vectorized
+
 # --- Functional Connectivity Generation ---
 def get_image_ids(name):
     """Get run IDs for a given task name."""
@@ -247,56 +265,78 @@ def save_and_zip_results(output_dir):
 # ## 2. Core Model Architectures
 
 # %%
-class ConvAutoencoder(nn.Module):
+class ConditionalVAE(nn.Module):
     """
-    Convolutional Autoencoder for learning shared FC patterns.
-    
-    Architecture:
-    - Encoder: Conv2d(1, 16) + ReLU + MaxPool -> Conv2d(16, 32) + ReLU + MaxPool -> Conv2d(32, 64) + ReLU + MaxPool
-    - Latent: 64 x 45 x 45 = 129,600 dimensions
-    - Decoder: ConvTranspose2d(64, 32) + ReLU -> ConvTranspose2d(32, 16) + ReLU -> ConvTranspose2d(16, 1) + Tanh
-    
-    Training: MSE loss, Adam optimizer (lr=0.001), 20 epochs, batch_size=16
+    Conditional Variational Autoencoder (MLP-based).
+    Inspired by Lu et al. (2024).
     """
-    def __init__(self, n_parcels=360):
-        super(ConvAutoencoder, self).__init__()
-        self.n = n_parcels
+    def __init__(self, n_features=64620, n_states=8, latent_dim=100):
+        super(ConditionalVAE, self).__init__()
+        self.n_features = n_features
+        self.n_states = n_states
+        self.latent_dim = latent_dim
         
-        self.encoder = nn.Sequential(
-            nn.Conv2d(1, 16, kernel_size=3, padding=1),
-            nn.BatchNorm2d(16),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2, 2),
-            nn.Conv2d(16, 32, kernel_size=3, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2, 2),
-            nn.Conv2d(32, 64, kernel_size=3, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2, 2)
+        # Encoder: x + condition -> h -> mu, logvar
+        self.encoder_mlp = nn.Sequential(
+            nn.Linear(n_features + n_states, 2048),
+            nn.BatchNorm1d(2048),
+            nn.Tanh(),
+            nn.Linear(2048, 1024),
+            nn.BatchNorm1d(1024),
+            nn.Tanh(),
+            nn.Linear(1024, 512),
+            nn.BatchNorm1d(512),
+            nn.Tanh()
         )
         
-        self.decoder = nn.Sequential(
-            nn.ConvTranspose2d(64, 32, kernel_size=2, stride=2),
-            nn.BatchNorm2d(32),
-            nn.ReLU(inplace=True),
-            nn.ConvTranspose2d(32, 16, kernel_size=2, stride=2),
-            nn.BatchNorm2d(16),
-            nn.ReLU(inplace=True),
-            nn.ConvTranspose2d(16, 1, kernel_size=2, stride=2),
+        self.fc_mu = nn.Linear(512, latent_dim)
+        self.fc_logvar = nn.Linear(512, latent_dim)
+        
+        # Decoder: latent + condition -> h -> reconstruction
+        self.decoder_mlp = nn.Sequential(
+            nn.Linear(latent_dim + n_states, 512),
+            nn.BatchNorm1d(512),
+            nn.Tanh(),
+            nn.Linear(512, 1024),
+            nn.BatchNorm1d(1024),
+            nn.Tanh(),
+            nn.Linear(1024, 2048),
+            nn.BatchNorm1d(2048),
+            nn.Tanh(),
+            nn.Linear(2048, n_features),
             nn.Tanh()
         )
 
-    def forward(self, x):
-        encoded = self.encoder(x)
-        decoded = self.decoder(encoded)
-        if decoded.shape[2:] != (self.n, self.n):
-            decoded = F.interpolate(decoded, size=(self.n, self.n), mode='bilinear', align_corners=True)
-        return decoded
+    def encode(self, x, c):
+        x_cond = torch.cat([x, c], dim=1)
+        h = self.encoder_mlp(x_cond)
+        mu = self.fc_mu(h)
+        logvar = self.fc_logvar(h)
+        return mu, logvar
+
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mu + eps * std
+
+    def decode(self, z, c):
+        z_cond = torch.cat([z, c], dim=1)
+        return self.decoder_mlp(z_cond)
+
+    def forward(self, x, c):
+        mu, logvar = self.encode(x, c)
+        z = self.reparameterize(mu, logvar)
+        recon = self.decode(z, c)
+        return recon, mu, logvar
     
     def count_parameters(self):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
+
+def cvae_loss(recon, x, mu, logvar, beta=1.0):
+    """CVAE Loss: MSE + KL Divergence."""
+    recon_loss = F.mse_loss(recon, x, reduction='mean')
+    kld = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
+    return recon_loss + beta * kld
 
 # %% [markdown]
 # ## 3. Sparse Dictionary Learning (K-SVD)
@@ -725,21 +765,11 @@ def paired_t_test(metrics1, metrics2):
 # %% [markdown]
 # ## 6. Ablation Studies
 
-def run_ablation_study(fc_task, fc_rest, model=None, K=None, L=None, epochs=20):
+def run_ablation_study(fc_task, fc_rest, task_name="motor", K=None, L=None, epochs=20):
     """
-    Run complete ablation study with K-Fold CV for ConvAE-based methods.
+    Run complete ablation study with K-Fold CV for CVAE-based methods.
     
-    Awareness Fix: Ablations 4-6 (which use a learned ConvAE) now use 5-Fold CV
-    to prevent identifiability leakage. The ConvAE is trained per fold on train 
-    subjects only and evaluated on held-out test subjects. Ablations 1-3 (no 
-    learned model) are not affected by double-dipping.
-    
-    Args:
-        fc_task, fc_rest: FC matrices
-        model: ConvAutoencoder model
-        K: Dictionary atoms (required if not None)
-        L: Sparsity level (required if not None)
-        epochs: Training epochs
+    Awareness Fix: Ablations 4-6 use a Conditional VAE trained per fold.
     """
     if K is None or L is None:
         raise ValueError("K and L parameters must be provided for ablation study")
@@ -750,165 +780,153 @@ def run_ablation_study(fc_task, fc_rest, model=None, K=None, L=None, epochs=20):
     
     n_subjects = fc_task.shape[0]
     n_parcels = fc_task.shape[1]
+    n_features = (n_parcels * (n_parcels - 1)) // 2
+    tril_idx = np.tril_indices(n_parcels, k=-1)
     results = {}
     
-    # Flatten function
-    def flatten(fc):
-        return fc.reshape(n_subjects, -1)
+    # State mapping
+    rest_code = HCP_STATES.get("rest", 0)
+    task_code = HCP_STATES.get(task_name.lower(), 1)
     
     def get_corr_and_metrics(fc_processed, fc_rest_proc=None):
         if fc_rest_proc is None:
             fc_rest_proc = fc_rest
-        task_flat = flatten(fc_processed)
-        rest_flat = flatten(fc_rest_proc)
+        # Flatten for correlation calculation
+        task_flat = fc_processed.reshape(n_subjects, -1)
+        rest_flat = fc_rest_proc.reshape(n_subjects, -1)
         corr = np.corrcoef(task_flat, rest_flat)[:n_subjects, n_subjects:]
         return corr, compute_all_metrics(corr)
     
-    # 1. Raw FC baseline (Finn et al.) - No learned model, no leakage
+    # 1. Raw FC baseline (Finn et al.)
     print("  Ablation 1: Raw FC baseline...")
     corr, metrics = get_corr_and_metrics(fc_task)
     results['Raw FC'] = {'metrics': metrics, 'corr_matrix': corr}
     
-    # 2. Group average subtraction - No learned model, no leakage
+    # 2. Group average subtraction
     print("  Ablation 2: Group average subtraction...")
     group_avg = np.mean(fc_task, axis=0, keepdims=True)
     fc_group_sub = fc_task - group_avg
     corr, metrics = get_corr_and_metrics(fc_group_sub)
     results['Group Average'] = {'metrics': metrics, 'corr_matrix': corr}
     
-    # 3. SDL only (on raw FC) - No learned model, no leakage
+    # 3. SDL only (on raw FC)
     print("  Ablation 3: SDL only...")
-    n_tri = int(n_parcels * (n_parcels - 1) / 2)
-    tril_idx = np.tril_indices(n_parcels, k=-1)
-    Y_raw = np.zeros((n_tri, n_subjects))
-    for i in tqdm(range(n_subjects), desc="  Vectorizing Raw FC"):
+    Y_raw = np.zeros((n_features, n_subjects))
+    for i in range(n_subjects):
         Y_raw[:, i] = fc_task[i][tril_idx]
     
     D_raw, X_raw = k_svd(Y_raw, K, L, n_iter=5, verbose=False, random_state=42)
     sdl_raw = np.dot(D_raw, X_raw).T
     fc_sdl_only = np.zeros_like(fc_task)
-    for i in tqdm(range(n_subjects), desc="  Reconstructing FC"):
+    for i in range(n_subjects):
         fc_sdl_only[i] = reconstruct_symmetric_matrix(sdl_raw[i], n_parcels)
     corr, metrics = get_corr_and_metrics(fc_sdl_only)
     results['SDL Only'] = {'metrics': metrics, 'corr_matrix': corr}
     
-    # === ABLATIONS 4-6: K-Fold CV to prevent double-dipping (Awareness Fix) ===
-    # ConvAE is trained per fold on train subjects only
-    if model is not None:
-        print("  Ablations 4-6: ConvAE-based (using 5-Fold CV to prevent leakage)...")
+    # === ABLATIONS 4-6: CVAE-based (5-Fold CV) ===
+    print("  Ablations 4-6: CVAE-based (using 5-Fold CV to prevent leakage)...")
+    
+    n_folds = 5
+    cv_indices = np.random.RandomState(42).permutation(n_subjects)
+    fold_size = n_subjects // n_folds
+    
+    latent_task_all = np.zeros((n_subjects, 100))
+    latent_rest_all = np.zeros((n_subjects, 100))
+    residuals_all = np.zeros_like(fc_task)
+    refined_all = np.zeros_like(fc_task)
+    
+    last_D = None
+    last_X = None
+    
+    for fold in tqdm(range(n_folds), desc="CVAE CV Folds"):
+        start = fold * fold_size
+        end = n_subjects if fold == n_folds - 1 else (fold + 1) * fold_size
+        test_idx = cv_indices[start:end]
+        train_idx = np.setdiff1d(cv_indices, test_idx)
+        n_train = len(train_idx)
+        n_test = len(test_idx)
         
-        n_folds = 5
-        cv_indices = np.random.RandomState(42).permutation(n_subjects)
-        fold_size = n_subjects // n_folds
+        # Train on both REST and TASK for CVAE
+        train_rest_v = vectorize_fc(fc_rest[train_idx])
+        train_task_v = vectorize_fc(fc_task[train_idx])
+        X_train = np.vstack([train_rest_v, train_task_v])
         
-        # Out-of-fold arrays for aggregation
-        latent_task_all = np.zeros((n_subjects, 1))  # placeholder, will resize
-        latent_rest_all = np.zeros((n_subjects, 1))
-        residuals_all = np.zeros_like(fc_task)
-        refined_all = np.zeros_like(fc_task)
-        latent_initialized = False
+        C_train = np.zeros((2 * n_train, NUM_STATES))
+        C_train[:n_train, rest_code] = 1.0
+        C_train[n_train:, task_code] = 1.0
         
-        # Store dictionary from the last fold for interpretability
-        last_D = None
-        last_X = None
+        train_tensor = torch.tensor(X_train, dtype=torch.float32)
+        cond_tensor = torch.tensor(C_train, dtype=torch.float32)
         
-        for fold in tqdm(range(n_folds), desc="ConvAE CV Folds"):
-            start = fold * fold_size
-            end = n_subjects if fold == n_folds - 1 else (fold + 1) * fold_size
-            test_idx = cv_indices[start:end]
-            train_idx = np.setdiff1d(cv_indices, test_idx)
-            n_train = len(train_idx)
-            n_test = len(test_idx)
+        fold_model = ConditionalVAE(n_features, NUM_STATES, 100).to(DEVICE)
+        fold_optimizer = optim.Adam(fold_model.parameters(), lr=0.001)
+        fold_loader = DataLoader(TensorDataset(train_tensor, cond_tensor), batch_size=32, shuffle=True)
+        
+        fold_model.train()
+        for _ in range(epochs):
+            for batch_x, batch_c in fold_loader:
+                batch_x, batch_c = batch_x.to(DEVICE), batch_c.to(DEVICE)
+                fold_optimizer.zero_grad()
+                recon, mu, logvar = fold_model(batch_x, batch_c)
+                loss = cvae_loss(recon, batch_x, mu, logvar)
+                loss.backward()
+                fold_optimizer.step()
+        
+        fold_model.eval()
+        
+        # Evaluate TEST subjects
+        test_rest_v = torch.tensor(vectorize_fc(fc_rest[test_idx]), dtype=torch.float32).to(DEVICE)
+        test_task_v = torch.tensor(vectorize_fc(fc_task[test_idx]), dtype=torch.float32).to(DEVICE)
+        
+        c_rest = torch.zeros((n_test, NUM_STATES)).to(DEVICE)
+        c_rest[:, rest_code] = 1.0
+        c_task = torch.zeros((n_test, NUM_STATES)).to(DEVICE)
+        c_task[:, task_code] = 1.0
+        
+        with torch.no_grad():
+            mu_r, _ = fold_model.encode(test_rest_v, c_rest)
+            mu_t, _ = fold_model.encode(test_task_v, c_task)
+            recon_t = fold_model.decode(mu_t, c_task).cpu().numpy()
             
-            # Train fresh ConvAE on REST data of TRAIN subjects only
-            train_rest = fc_rest[train_idx]
-            train_tensor = torch.tensor(train_rest[:, np.newaxis, :, :], dtype=torch.float32)
-            
-            fold_model = ConvAutoencoder(n_parcels).to(DEVICE)
-            fold_optimizer = optim.Adam(fold_model.parameters(), lr=0.001)
-            fold_loader = DataLoader(TensorDataset(train_tensor, train_tensor), batch_size=16, shuffle=True)
-            
-            fold_model.train()
-            num_epochs = epochs if 'epochs' in locals() else 20
-            for _ in tqdm(range(num_epochs), desc=f"  Fold {fold+1} Training", leave=False):
-                for batch, _ in fold_loader:
-                    batch = batch.to(DEVICE)
-                    fold_optimizer.zero_grad()
-                    loss = nn.MSELoss()(fold_model(batch), batch)
-                    loss.backward()
-                    torch.nn.utils.clip_grad_norm_(fold_model.parameters(), max_norm=5.0)
-                    fold_optimizer.step()
-            
-            fold_model.eval()
-            
-            n_train = len(train_idx)
-            n_test = len(test_idx)
-            
-            # Compute latent, residuals, and refined for TEST subjects
-            test_task_tensor = torch.tensor(fc_task[test_idx, np.newaxis, :, :], dtype=torch.float32).to(DEVICE)
-            test_rest_tensor = torch.tensor(fc_rest[test_idx, np.newaxis, :, :], dtype=torch.float32).to(DEVICE)
-            
-            with torch.no_grad():
-                lt = fold_model.encoder(test_task_tensor).reshape(n_test, -1).cpu().numpy()
-                lr = fold_model.encoder(test_rest_tensor).reshape(n_test, -1).cpu().numpy()
-                recon = fold_model(test_task_tensor).cpu().numpy().reshape(n_test, n_parcels, n_parcels)
-            
-            # Initialize latent arrays on first fold (need to know dim)
-            if not latent_initialized:
-                latent_dim = lt.shape[1]
-                latent_task_all = np.zeros((n_subjects, latent_dim))
-                latent_rest_all = np.zeros((n_subjects, latent_dim))
-                latent_initialized = True
+            latent_rest_all[test_idx] = mu_r.cpu().numpy()
+            latent_task_all[test_idx] = mu_t.cpu().numpy()
             
             for i, idx in enumerate(test_idx):
-                latent_task_all[idx] = lt[i]
-                latent_rest_all[idx] = lr[i]
-                residuals_all[idx] = fc_task[idx] - recon[i]
-            
-            # SDL: Learn dictionary from TRAIN residuals, apply to TEST
-            train_task_tensor = torch.tensor(fc_task[train_idx, np.newaxis, :, :], dtype=torch.float32).to(DEVICE)
-            with torch.no_grad():
-                train_recon = fold_model(train_task_tensor).cpu().numpy().reshape(n_train, n_parcels, n_parcels)
-            train_residuals = fc_task[train_idx] - train_recon
-            
-            Y_train = np.zeros((n_tri, n_train))
-            for i in tqdm(range(n_train), desc=f"  Fold {fold+1} Train SDL Setup", leave=False):
-                Y_train[:, i] = train_residuals[i][tril_idx]
-            
-            Y_train = np.nan_to_num(Y_train, nan=0.0)
-            D_train, _ = k_svd(Y_train, K, L, n_iter=5, verbose=False, random_state=42)
-            
-            test_residuals = np.array([residuals_all[idx] for idx in test_idx])
-            Y_test = np.zeros((n_tri, n_test))
-            for i in tqdm(range(n_test), desc=f"  Fold {fold+1} Test SDL Setup", leave=False):
-                Y_test[:, i] = test_residuals[i][tril_idx]
-            
-            Y_test = np.nan_to_num(Y_test, nan=0.0)
-            X_test = omp_sparse_coding(Y_test, D_train, L)
-            sdl_retr = np.dot(D_train, X_test).T
-            
-            for i, idx in tqdm(enumerate(test_idx), desc=f"  Fold {fold+1} Recon", total=n_test, leave=False):
-                refined_all[idx] = residuals_all[idx] - reconstruct_symmetric_matrix(sdl_retr[i], n_parcels)
-            
-            last_D = D_train
-            last_X = X_test
+                residuals_all[idx] = fc_task[idx] - reconstruct_symmetric_matrix(recon_t[i], n_parcels)
         
-        # Ablation 4: ConvAE latent features (aggregated out-of-fold)
-        print("  Ablation 4: ConvAE latent features (CV-aggregated)...")
-        corr = np.corrcoef(latent_task_all, latent_rest_all)[:n_subjects, n_subjects:]
-        metrics = compute_all_metrics(corr)
-        results['ConvAE Latent'] = {'metrics': metrics, 'corr_matrix': corr}
+        # SDL: Learn on train residuals
+        with torch.no_grad():
+            train_task_tensor = torch.tensor(train_task_v, dtype=torch.float32).to(DEVICE)
+            c_task_train = torch.zeros((n_train, NUM_STATES)).to(DEVICE)
+            c_task_train[:, task_code] = 1.0
+            z_train, _ = fold_model.encode(train_task_tensor, c_task_train)
+            train_recon = fold_model.decode(z_train, c_task_train).cpu().numpy()
+            train_residuals_v = train_task_v - train_recon
+            
+        D_train, _ = k_svd(train_residuals_v.T, K, L, n_iter=5, verbose=False, random_state=42)
         
-        # Ablation 5: ConvAE residuals only (aggregated out-of-fold)
-        print("  Ablation 5: ConvAE residuals only (CV-aggregated)...")
-        corr, metrics = get_corr_and_metrics(residuals_all)
-        results['ConvAE Only'] = {'metrics': metrics, 'corr_matrix': corr}
+        # Apply to test residuals
+        test_residuals_v = vectorize_fc(residuals_all[test_idx])
+        X_test = omp_sparse_coding(test_residuals_v.T, D_train, L)
+        sdl_retr = np.dot(D_train, X_test).T
         
-        # Ablation 6: Full pipeline ConvAE + SDL (aggregated out-of-fold)
-        print("  Ablation 6: ConvAE + SDL full pipeline (CV-aggregated)...")
-        corr, metrics = get_corr_and_metrics(refined_all)
-        results['Full Pipeline'] = {'metrics': metrics, 'corr_matrix': corr, 
-                                  'dictionary': last_D, 'sparse_codes': last_X}
+        for i, idx in enumerate(test_idx):
+            refined_all[idx] = residuals_all[idx] - reconstruct_symmetric_matrix(sdl_retr[i], n_parcels)
+        
+        last_D, last_X = D_train, X_test
+    
+    # Results
+    corr = np.corrcoef(latent_task_all, latent_rest_all)[:n_subjects, n_subjects:]
+    results['ConvAE Latent'] = {'metrics': compute_all_metrics(corr), 'corr_matrix': corr}
+    
+    corr, metrics = get_corr_and_metrics(residuals_all)
+    results['ConvAE Only'] = {'metrics': metrics, 'corr_matrix': corr}
+    
+    corr, metrics = get_corr_and_metrics(refined_all)
+    results['Full Pipeline'] = {'metrics': metrics, 'corr_matrix': corr, 
+                              'dictionary': last_D, 'sparse_codes': last_X}
+    
+    return results
     
     return results
 
@@ -1236,6 +1254,11 @@ def plot_interpretability(model, dictionary, n_parcels, save_dir):
         if isinstance(module, nn.Conv2d):
             first_conv = module
             break
+    if hasattr(model, 'encoder') and hasattr(model.encoder, 'modules'):
+        for module in model.encoder.modules():
+            if isinstance(module, nn.Conv2d):
+                first_conv = module
+                break
     
     if first_conv is not None:
         filters = first_conv.weight.data.cpu().numpy()
@@ -1357,11 +1380,11 @@ def generate_manuscript_report(all_results, output_dir):
         # Model Details
         f.write("8. MODEL ARCHITECTURE DETAILS\n")
         f.write("-" * 50 + "\n")
-        f.write("ConvAutoencoder:\n")
-        f.write("  Encoder: Conv2d(1, 16, 32, 64) + BatchNorm + ReLU + MaxPool\n")
-        f.write("  Decoder: ConvTranspose2d(64, 32, 16, 1) + BatchNorm + ReLU + Tanh\n")
+        f.write("Conditional VAE:\n")
+        f.write("  Encoder: Linear layers (input_dim -> 100 -> latent_dim)\n")
+        f.write("  Decoder: Linear layers (latent_dim + num_states -> 100 -> input_dim)\n")
         f.write(f"  Parameters: {all_results['model_params']:,}\n")
-        f.write("  Training: MSE Loss, Adam (lr=0.001), 20 epochs\n\n")
+        f.write("  Training: CVAE Loss, Adam (lr=0.001), 20 epochs\n\n")
         f.write("Sparse Dictionary Learning (K-SVD):\n")
         f.write(f"  K (atoms): {all_results['best_K']}\n")
         f.write(f"  L (sparsity): {all_results['best_L']}\n")
@@ -1541,17 +1564,15 @@ def run_complete_analysis(n_subjects=100, task="motor", use_synthetic=True, n_fo
     if best_K is None or best_L is None:
         raise ValueError("K and L parameters must be determined before continuing")
     
-    # ===== PHASE 2: CONVAE SETUP (CV-based training happens inside ablation) =====
-    print("\n[2/9] ConvAutoencoder Setup (CV-based training in ablation to prevent leakage)...")
-    model = ConvAutoencoder(n_parcels).to(DEVICE)
+    # ===== PHASE 2: CVAE SETUP =====
+    print("\n[2/9] Conditional VAE Setup...")
+    n_feat = (n_parcels * (n_parcels - 1)) // 2
+    model = ConditionalVAE(n_feat, NUM_STATES, 100).to(DEVICE)
     all_results['model_params'] = model.count_parameters()
-    # NOTE: We no longer train a single model on ALL subjects here.
-    # The ablation study (Phase 3) trains fresh models per CV fold to prevent
-    # the identifiability inflation described in awareness.txt (Orlichenko et al.)
     
     # ===== PHASE 3: ABLATION STUDIES (with internal CV) =====
     print(f"\n[3/9] Running ablation studies (K={best_K}, L={best_L}, with 5-Fold CV)...")
-    ablation = run_ablation_study(fc_task, fc_rest, model, best_K, best_L, epochs=epochs)
+    ablation = run_ablation_study(fc_task, fc_rest, task, best_K, best_L, epochs=epochs)
     all_results['ablation'] = ablation
     plot_ablation_results(ablation, os.path.join(run_dir, "ablation_results.png"))
     
@@ -1599,7 +1620,7 @@ def run_complete_analysis(n_subjects=100, task="motor", use_synthetic=True, n_fo
     
     # ===== PHASE 6: CROSS-VALIDATION =====
     print("\n[6/9] Running cross-validation...")
-    cv_results = cross_validation(fc_task, fc_rest, n_folds=n_folds, K=K, L=L, epochs=10)
+    cv_results = cross_validation(fc_task, fc_rest, task, n_folds=n_folds, K=best_K, L=best_L, epochs=10)
     all_results['cv'] = cv_results
     
     # ===== PHASE 7: INTERPRETABILITY =====
