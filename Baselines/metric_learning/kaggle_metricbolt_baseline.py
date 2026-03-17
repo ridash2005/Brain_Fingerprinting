@@ -189,8 +189,8 @@ def generate_synthetic_timeseries(num_subjects, n_parcels=360, length=284):
         # Combine: shared + unique + noise
         ts = weights @ shared.reshape(1, -1) + 0.5 * unique_sig.reshape(1, -1) + np.random.normal(0, 0.5, (n_parcels, length))
         
-        # Z-score
-        ts = (ts - ts.mean(axis=1, keepdims=True)) / (ts.std(axis=1, keepdims=True) + 1e-8)
+        # Mean-center only (match HCP preprocessing in kaggle_brain_fingerprinting.py)
+        ts = ts - ts.mean(axis=1, keepdims=True)
         ts_data.append(ts)
     return np.array(ts_data)
 
@@ -216,7 +216,7 @@ def get_image_ids(name):
     return run_ids
 
 def load_concat_timeseries(subject_id, run_idx_list, base_dir, dynamic_length=None):
-    """Load and concatenate timeseries for a subject, with z-scoring and optional cropping."""
+    """Load and concatenate timeseries for a subject, with mean-centering and optional cropping."""
     ts_list = []
     for run_id in run_idx_list:
         bold_path = os.path.join(base_dir, "subjects", str(subject_id), "timeseries")
@@ -224,7 +224,7 @@ def load_concat_timeseries(subject_id, run_idx_list, base_dir, dynamic_length=No
         full_path = os.path.join(bold_path, bold_file)
         if os.path.exists(full_path):
             ts = np.load(full_path)
-            ts = (ts - np.mean(ts, axis=1, keepdims=True)) / (np.std(ts, axis=1, keepdims=True) + 1e-8)
+            ts = ts - np.mean(ts, axis=1, keepdims=True)
             ts_list.append(ts)
             
     if not ts_list:
@@ -501,11 +501,11 @@ def run_comparison(task_name="motor", num_subjects=100, dynamic_length=284, epoc
     print("\n[*] Computing Raw FC Baseline (Finn et al.)...")
     raw_rest = []
     raw_task = []
-    triu_idx = np.triu_indices(360, k=1)
+    tril_idx = np.tril_indices(360, k=-1)
     
     for i in tqdm(range(num_subjects), desc="Vectorizing Raw FC"):
-        raw_rest.append(np.corrcoef(rest_tensor[i].numpy())[triu_idx])
-        raw_task.append(np.corrcoef(task_tensor[i].numpy())[triu_idx])
+        raw_rest.append(np.corrcoef(rest_tensor[i].numpy())[tril_idx])
+        raw_task.append(np.corrcoef(task_tensor[i].numpy())[tril_idx])
     
     raw_rest = np.array(raw_rest)
     raw_task = np.array(raw_task)
