@@ -1,3 +1,0 @@
-Motor vs Rest - Accuracy: 0.2802
-Wm vs Rest - Accuracy: 0.3835
-Emotion vs Rest - Accuracy: 0.1947

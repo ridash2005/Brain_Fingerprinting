@@ -1,3 +1,0 @@
-Motor vs Rest - Accuracy before processing: 0.0029498525073746312
-Motor vs Rest - Accuracy after Avg: 0.0058997050147492625
-Motor vs Rest - Accuracy after Avg+SDL: 0.0

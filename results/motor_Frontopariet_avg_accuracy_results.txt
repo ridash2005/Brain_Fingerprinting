@@ -1,3 +1,0 @@
-Motor vs Rest - Accuracy before processing: 0.0029498525073746312
-Motor vs Rest - Accuracy after ConvAutoEncoder: 0.0
-Motor vs Rest - Accuracy after ConvAutoEncoder+SDL: 0.0029498525073746312

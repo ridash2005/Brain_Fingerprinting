@@ -1,3 +1,0 @@
-Emotion vs Rest - Accuracy before processing: 0.19469026548672566
-Emotion vs Rest - Accuracy after ConvAutoEncoder: 0.2890855457227139
-Emotion vs Rest - Accuracy after ConvAutoEncoder+SDL: 0.6607669616519174

@@ -1,3 +1,0 @@
-Wm vs Rest - Accuracy before processing: 0.3834808259587021
-Wm vs Rest - Accuracy after ConvAutoEncoder: 0.504424778761062
-Wm vs Rest - Accuracy after ConvAutoEncoder+SDL: 0.7227138643067846
