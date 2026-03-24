@@ -156,11 +156,41 @@ $$
 ## 5. Phase 4: Statistical Validation
 
 -   **Bootstrap CIs**: Resampling subjects $B=1000$ times.
--   **Permutation Test**:
+-   **Permutation Test (vs. Random Chance)**: Shuffling subject labels $B=1000$ times to test if the observed ID rate is significantly better than random guessing.
 
 $$
 p = \frac{\sum_{b=1}^{B} [ \text{Acc}_{\text{null}} \ge \text{Acc}_{\text{obs}} ] + 1}{B + 1}
 $$
+
+-   **Paired Permutation Test (Approximate Randomization)**: A non-parametric test comparing the proposed model against the Raw FC baseline. It randomly flips the sign of the performance differences between models for each subject to test if the mean difference is significant.
+
+$$
+p_{\text{paired}} = \frac{\sum_{b=1}^{B} [ |\text{Diff}_{\text{null}}| \ge |\text{Diff}_{\text{obs}}| ] + 1}{B + 1}
+$$
+
+-   **McNemar's Test**: A paired categorical test used to compare the classifiers on the same set of subjects. It focuses on discordant pairs (where one model is correct and the other is not). 
+    - If discordant pairs $b+c < 25$, it uses the **Exact Binomial Test**.
+    - If $b+c \ge 25$, it uses the **Chi-squared** statistic with continuity correction:
+    
+$$
+\chi^2 = \frac{(|b - c| - 1)^2}{b + c}
+$$
+
+---
+
+## 6. Phase 5: Robustness Analysis
+
+To ensure the "Double-Denoising" framework is not fragile, we perform two types of stress testing:
+
+### 6.1 Noise Robustness ($\sigma_{\text{noise}}$)
+We inject Gaussian noise $\epsilon \sim \mathcal{N}(0, \sigma^2)$ into the Task FC matrices and observe the decay in Top-1 Accuracy:
+
+$$
+\mathbf{X}_{\text{noisy}} = \text{clip}(\mathbf{X} + \epsilon, -1, 1)
+$$
+
+### 6.2 Sample Size Sensitivity ($M$)
+We measure how the identification rate scales with the number of subjects $M$. The model is tested with subsets from $20\%$ to $100\%$ of the population. This proves that the feature space ($64,620$) remains distinctive even as the number of candidates increases.
 
 ---
 
