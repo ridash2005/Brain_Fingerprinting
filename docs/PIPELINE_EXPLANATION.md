@@ -1,4 +1,4 @@
-# Pipeline Explanation: `notebooks/kaggle_brain_fingerprinting.py`
+# Pipeline Explanation:
 
 ---
 
