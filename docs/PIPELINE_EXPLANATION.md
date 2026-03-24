@@ -86,6 +86,30 @@ $$
 - **Dimensions**: $\mathbf{F}_m \in \mathbb{R}^{64,620}$
 - **Logic**: Isolates the *idiosyncratic* biological signal from systemic noise.
 
+### 2.4 Final Identification Step (The "Match")
+The pure fingerprints $\{ \mathbf{F} \}$ are the ultimate output of the denoising pipeline. We use them to perform subject identification by matching a "Query" (Task condition) against a "Database" (Rest condition).
+
+#### The Matching Algorithm:
+For each subject $i$ in the Task group, we calculate the Pearson Correlation between their denoised fingerprint $\mathbf{F}_{\text{task},i}$ and every subject $j$ in the denoised Rest database:
+
+$$
+\text{Matching Score}_{i,j} = \text{Corr}(\mathbf{F}_{\text{task},i}, \mathbf{F}_{\text{rest},j})
+$$
+
+#### Prediction Rule:
+The predicted identity for subject $i$ is the subject $j$ in the database that yields the maximum correlation:
+
+$$
+\text{Predicted ID}_i = \text{argmax}_{j} (\text{Matching Score}_{i,j})
+$$
+
+#### Why this works:
+Because $\mathbf{F}$ has been stripped of the "Mean Brain" (via ConvAE) and "Scanner Noise" (via SDL), the remaining signal is dominated by the subject's unique functional architecture. This results in:
+1.  **High Self-Correlation**: $\text{Corr}(\mathbf{F}_{\text{task},i}, \mathbf{F}_{\text{rest},i}) \approx 1$
+2.  **Low Other-Correlation**: $\text{Corr}(\mathbf{F}_{\text{task},i}, \mathbf{F}_{\text{rest},j}) \approx 0$ (for $j \neq i$)
+
+This separation ensures that the diagonal of the $M \times M$ identification matrix is maximally bright, yielding high **Top-1 Accuracy**.
+
 ---
 
 ## 3. Phase 2: Hyperparameter Optimization (Grid Search)
