@@ -105,8 +105,17 @@ $$
 
 #### Why this works:
 Because $\mathbf{F}$ has been stripped of the "Mean Brain" (via ConvAE) and "Scanner Noise" (via SDL), the remaining signal is dominated by the subject's unique functional architecture. This results in:
-1.  **High Self-Correlation**: $\text{Corr}(\mathbf{F}_{\text{task},i}, \mathbf{F}_{\text{rest},i}) \approx 1$
-2.  **Low Other-Correlation**: $\text{Corr}(\mathbf{F}_{\text{task},i}, \mathbf{F}_{\text{rest},j}) \approx 0$ (for $j \neq i$)
+1.  **High Self-Correlation**: 
+    
+$$
+\text{Corr}(\mathbf{F}_{\text{task},i}, \mathbf{F}_{\text{rest},i}) \approx 1
+$$
+
+2.  **Low Other-Correlation**: 
+    
+$$
+\text{Corr}(\mathbf{F}_{\text{task},i}, \mathbf{F}_{\text{rest},j}) \approx 0 \quad (\text{for } j \neq i)
+$$
 
 This separation ensures that the diagonal of the $M \times M$ identification matrix is maximally bright, yielding high **Top-1 Accuracy**.
 
