@@ -102,21 +102,21 @@ Performance is measured on the $M \times M$ identification matrix.
 
 1.  **Top-1 Accuracy**:
     
-    $$
-    \text{Acc} = \frac{1}{M} \sum_{i=1}^M \mathbb{I}\left(\text{argmax}_j (\text{Corr}(\mathbf{F}_{\text{task},i}, \mathbf{F}_{\text{rest},j})) = i\right)
-    $$
+$$
+\text{Accuracy} = \frac{1}{M} \sum_{i=1}^{M} \text{I } [ \text{argmax}_{j} (\text{Corr}(\mathbf{F}_{\text{task},i}, \mathbf{F}_{\text{rest},j})) = i ]
+$$
 
 2.  **Mean Reciprocal Rank (MRR)**:
     
-    $$
-    \text{MRR} = \frac{1}{M} \sum_{i=1}^M \frac{1}{\text{Rank}_i}
-    $$
+$$
+\text{MRR} = \frac{1}{M} \sum_{i=1}^{M} \frac{1}{\text{Rank}_{i}}
+$$
 
 3.  **Differential Identifiability ($I_{\text{diff}}$)**:
     
-    $$
-    I_{\text{diff}} = \frac{1}{M} \sum \text{Corr}_{\text{self}} - \frac{1}{M(M-1)} \sum \text{Corr}_{\text{others}}
-    $$
+$$
+I_{\text{diff}} = \frac{1}{M} \sum (\text{Corr}_{\text{self}}) - \frac{1}{M(M-1)} \sum (\text{Corr}_{\text{others}})
+$$
 
 ---
 
@@ -126,7 +126,7 @@ Performance is measured on the $M \times M$ identification matrix.
 -   **Permutation Test**:
 
 $$
-p = \frac{\sum_{b=1}^B \mathbb{I}(\text{Acc}_{\text{null}} \ge \text{Acc}_{\text{obs}}) + 1}{B + 1}
+p = \frac{\sum_{b=1}^{B} [ \text{Acc}_{\text{null}} \ge \text{Acc}_{\text{obs}} ] + 1}{B + 1}
 $$
 
 ---
