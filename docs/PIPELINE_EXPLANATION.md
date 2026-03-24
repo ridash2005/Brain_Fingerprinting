@@ -1,6 +1,4 @@
-# Comprehensive Pipeline Explanation: `notebooks/kaggle_brain_fingerprinting.py`
-
-This document provides a mathematically rigorous and logically exhaustive explanation of the Brain Fingerprinting pipeline implemented in `notebooks/kaggle_brain_fingerprinting.py`. This script represents the final, production-ready analysis designed for the IEEE Transactions on Cognitive and Developmental Systems (TCDS) manuscript.
+# Pipeline Explanation: `notebooks/kaggle_brain_fingerprinting.py`
 
 ---
 
@@ -203,5 +201,3 @@ We measure how the identification rate scales with the number of subjects $M$. T
 | **State 3** | **Tril Extraction** | Vectorized Residuals | $64,620 \times 1$ |
 | **State 4** | SDL / K-SVD | Sparse Artifact Codes | $K \times 1$ (e.g. $15 \times 1$) |
 | **Final** | **Denoised ID** | The Pure Fingerprint | $64,620 \times 1$ |
-
-**Conclusion**: The use of the **Lower Triangular Matrix** is essential for high-dimensional stability, reducing the feature space by ~50% before SDL while maintaining 100% of the unique connectivity information.
